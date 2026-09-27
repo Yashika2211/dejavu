@@ -407,6 +407,8 @@ def _resolve(match: re.Match[str], values: Mapping[str, Any]) -> Any:
     value = values[match.group(1)]
     if match.group(2):
         delta = float(match.group(3))
+        if isinstance(value, int) and delta.is_integer():
+            delta = int(delta)
         value = value + delta if match.group(2) == "+" else value - delta
     return value
 
