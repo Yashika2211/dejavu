@@ -1,0 +1,93 @@
+# Novel (held out for the live demo and the held-out set): Identity rotated the JWT signing key.
+# auth-svc issuer pods sign with the new kid, but validator pods cache the JWKS for 24 hours and
+# reject every new token. Unlike most auth incidents, a restart (which refetches the JWKS) is
+# the fix, which tests whether remembered "restarts don't help" beliefs block the right action.
+id: jwks_rotation_mismatch
+title: Stale JWKS cache after a signing key rotation
+category: novel
+symptom_class: auth_failures
+look_alike_group: B
+culprit_service: auth-svc
+trigger: config
+
+variants:
+  onset: {randint: [-9, -6]}
+  auth_4xx: {uniform: [24, 36]}
+  failure_share: {uniform: [0.2, 0.3]}
+
+alert:
+  name: AuthFailureRateHigh
+  service: auth-svc
+  summary: authentication failure rate above 12% for 5 minutes
+  description: "authentication failure rate is {value} on auth-svc (threshold 12%)"
+  metric_service: auth-svc
+  metric: error_rate_4xx
+  threshold: 12
+  expr: 'sum(rate(http_server_requests_total{service="auth-svc",code="401"}[5m])) / sum(rate(http_server_requests_total{service="auth-svc"}[5m])) > 0.12'
+  runbook: auth-failures
+  labels: {team: identity}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 8
+
+effects:
+  - event:
+      type: config
+      service: auth-svc
+      at_offset: "{{onset - 2}}"
+      author: Arjun Nair
+      summary: "JWT signing key rotated: kid 2026-08 -> 2026-09"
+      trigger: true
+      details:
+        key: jwt.signing_key
+        from: kid 2026-08
+        to: kid 2026-09
+        diff: "monthly key rotation; new tokens are signed with kid 2026-09, the JWKS endpoint publishes both keys"
+
+  - metric_shift: {service: auth-svc, metric: error_rate_4xx, shape: ramp, magnitude: "{{auth_4xx}}", start_offset: "{{onset}}", ramp_minutes: 8, noise: 0.05}
+  - metric_shift: {service: edge-gateway, metric: error_rate_4xx, shape: ramp, magnitude: 6, start_offset: "{{onset}}", ramp_minutes: 8, noise: 0.1}
+
+  - log_inject:
+      service: auth-svc
+      level: WARN
+      caller: token/validator.go:144
+      template: token validation failed
+      fields: {error: 'token is unverifiable: error while executing keyfunc: key with kid "2026-09" not found in JWKS cache', kid: "2026-09", sub: "u_{u}"}
+      rate_per_min: 60
+      start_offset: "{{onset}}"
+      ramp_minutes: 8
+      vars: {u: {hex: 8}}
+  - log_inject:
+      service: auth-svc
+      level: INFO
+      caller: token/jwks.go:58
+      template: jwks cache hit
+      fields: {kids: ["2026-08"], age_s: "{a}", ttl_s: 86400}
+      rate_per_min: 2
+      start_offset: "{{onset}}"
+      vars: {a: {randint: [40000, 60000]}}
+
+discriminators:
+  - text: tokens fail because their kid is not in the validator's JWKS cache
+    signal: {kind: log, service: auth-svc, contains: not found in JWKS cache}
+  - text: the signing key was rotated minutes before the failures began
+    signal: {kind: change, service: auth-svc, change_type: config, window_min: 60}
+
+relevant_evidence:
+  - [query_metrics, auth-svc]
+  - [search_logs, auth-svc]
+  - [list_changes, auth-svc]
+  - [get_runbook, auth-svc]
+
+correct_remediations:
+  - {action: restart, target: auth-svc, note: "restarted validators refetch the JWKS and accept the new kid"}
+  - {action: rollback, target: auth-svc, note: "redeploying replaces the validator pods, which refetch the JWKS"}
+  - {action: config_tuning, target: auth-svc, note: "forcing a JWKS refresh (or lowering the cache TTL) picks up the new key"}
+
+ineffective_remediations:
+  - {action: cert_rotation, target: [edge-gateway, auth-svc], note: "TLS certificates are fine"}
+  - {action: node_drain, note: "clocks are fine"}
+
+prevention: [owner_review, canary_rollout]
