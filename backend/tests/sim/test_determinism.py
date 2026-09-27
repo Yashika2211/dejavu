@@ -26,6 +26,7 @@ def test_instantiation_is_deterministic() -> None:
     first = [fingerprint(s) for s in gauntlet()]
     assert first == [fingerprint(s) for s in gauntlet()]
     assert first != [fingerprint(s) for s in gauntlet(seed=7)]
+    assert [s.incident_id for s in gauntlet()] == [s.incident_id for s in gauntlet(seed=7)]
 
 
 def test_cached_telemetry_is_reused_until_the_scenario_changes(tmp_path) -> None:
