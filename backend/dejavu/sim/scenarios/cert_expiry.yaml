@@ -1,0 +1,111 @@
+# edge-gateway presents an mTLS client certificate to auth-svc. cert-manager has been failing to
+# renew it since the ClusterIssuer was renamed a month ago, and today it expired: every login
+# through the edge fails the TLS handshake, while auth-svc itself sees less traffic, not errors.
+id: cert_expiry
+title: Expired mTLS certificate between edge and auth
+symptom_class: auth_failures
+look_alike_group: B
+culprit_service: edge-gateway
+culprit_aliases: [auth-svc]
+trigger: time
+
+variants:
+  onset: {randint: [-9, -6]}
+  edge_5xx: {uniform: [30, 35]}
+  failure_share: {uniform: [0.26, 0.34]}
+
+alert:
+  name: AuthFailureRateHigh
+  service: auth-svc
+  summary: authentication failure rate above 20% for 5 minutes
+  description: "authentication failure rate is {value} on /v1/auth/* at the edge (threshold 20%)"
+  metric_service: edge-gateway
+  metric: error_rate_5xx
+  threshold: 20
+  expr: 'sum(rate(envoy_cluster_upstream_rq{envoy_cluster_name="auth-svc",envoy_response_code_class="5"}[5m])) / sum(rate(envoy_cluster_upstream_rq{envoy_cluster_name="auth-svc"}[5m])) > 0.2'
+  runbook: auth-failures
+  labels: {team: identity}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 1
+
+effects:
+  - metric_shift: {service: edge-gateway, metric: cert_days_remaining, shape: linear, mode: set, magnitude: 0.12, to: 0, start_offset: -180, duration: "{{onset + 180}}", noise: 0}
+  - metric_shift: {service: edge-gateway, metric: cert_days_remaining, shape: step, mode: set, magnitude: 0, start_offset: "{{onset}}", noise: 0}
+  - metric_shift: {service: edge-gateway, metric: error_rate_5xx, shape: ramp, magnitude: "{{edge_5xx}}", start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.05}
+  - metric_shift: {service: auth-svc, metric: rps, shape: ramp, mode: multiply, magnitude: 0.45, start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.03}
+  - metric_shift: {service: edge-gateway, metric: latency_p99_ms, shape: ramp, magnitude: 40, start_offset: "{{onset}}", ramp_minutes: 1}
+
+  - log_inject:
+      service: auth-svc
+      level: ERROR
+      caller: http/server.go:3487
+      template: TLS handshake failed
+      fields: {remote: "{ip}:{port}", error: "tls: failed to verify certificate: x509: certificate has expired or is not yet valid: current time {utc_iso} is after {expiry}"}
+      rate_per_min: 55
+      start_offset: "{{onset}}"
+      ramp_minutes: 1
+      vars: {ip: {pod_ip: edge-gateway}, port: {randint: [40000, 60999]}, expiry: {utc_at: "{{onset}}"}}
+  - log_inject:
+      service: edge-gateway
+      level: WARN
+      logger: connection
+      thread: "{w}"
+      template: "[C{c}] TLS error: 268436498:SSL routines:OPENSSL_internal:SSLV3_ALERT_BAD_CERTIFICATE (upstream auth-svc.prod.svc.cluster.local)"
+      rate_per_min: 30
+      start_offset: "{{onset}}"
+      ramp_minutes: 1
+      vars: {w: {randint: [10, 40]}, c: {randint: [100000, 999999]}}
+  - log_inject:
+      service: edge-gateway
+      level: INFO
+      template: '"POST /v1/auth/token HTTP/2" 503 UF,URX 0 91 {d} - "{ip}" "{ua}" "{req}" "auth-svc.prod.svc.cluster.local" "-"'
+      rate_per_min: 60
+      start_offset: "{{onset}}"
+      ramp_minutes: 1
+      vars:
+        d: {randint: [3, 25]}
+        ip: {choice: ["49.36.112.18", "106.51.77.203", "27.97.14.160", "223.187.3.41"]}
+        ua: {choice: ["KestrelPay-Android/7.4.1", "KestrelPay-iOS/7.4.0"]}
+        req: {hex: 32}
+  - log_inject:
+      service: edge-gateway
+      format: k8s_event
+      level: WARN
+      logger: Failed
+      caller: certificate/edge-gateway-mtls
+      template: 'The certificate request has failed to complete and will be retried: issuer.cert-manager.io "kestrel-ca-issuer" not found'
+      rate_per_min: 0.2
+      start_offset: -180
+
+  - trace_delay: {service: edge-gateway, operation: POST /v1/auth/token, add_ms: [3, 20], share: 1.0, start_offset: "{{onset}}", error_share: 1.0, error: "upstream connect error: TLS error: SSLV3_ALERT_BAD_CERTIFICATE"}
+
+discriminators:
+  - text: edge-gateway's mTLS certificate has zero days remaining
+    signal: {kind: metric, service: edge-gateway, metric: cert_days_remaining, op: "<=", value: 0.01}
+  - text: auth-svc rejects the handshake with x509 certificate has expired
+    signal: {kind: log, service: auth-svc, contains: certificate has expired}
+  - text: requests stop reaching auth-svc (its traffic drops rather than its errors rising)
+    signal: {kind: metric, service: auth-svc, metric: rps, op: "<", value: 0.75, relative: true}
+  - text: cert-manager has been failing to renew for a while
+    signal: {kind: log, service: edge-gateway, contains: kestrel-ca-issuer, window_min: 180}
+
+relevant_evidence:
+  - [query_metrics, edge-gateway]
+  - [query_metrics, auth-svc]
+  - [search_logs, auth-svc]
+  - [search_logs, edge-gateway]
+  - [get_traces, edge-gateway]
+  - [get_runbook, auth-svc]
+
+correct_remediations:
+  - {action: cert_rotation, target: [edge-gateway, auth-svc], note: "issuing a fresh certificate (and fixing the issuer reference) restores the handshake"}
+
+ineffective_remediations:
+  - {action: restart, target: [edge-gateway, auth-svc], note: "pods restart with the same expired certificate"}
+  - {action: rollback, target: [edge-gateway, auth-svc], note: "no deploy caused this; the certificate is still expired"}
+  - {action: node_drain, note: "not a node problem"}
+
+prevention: [owner_review]
