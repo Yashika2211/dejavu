@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from dejavu.sim.analysis import change_point, sparkline
 from dejavu.sim.clock import fmt_day_hm, fmt_hm, fmt_hms
@@ -518,6 +518,12 @@ def execute(world: IncidentWorld, name: str, raw_args: dict[str, Any]) -> ToolRe
         )
     try:
         args = tool.args.model_validate(raw_args)
+    except ValidationError as exc:
+        problems = "; ".join(f"{'.'.join(map(str, e['loc'])) or 'args'}: {e['msg']}" for e in exc.errors())
+        return ToolResult(
+            tool=name, ok=False, sim_minutes=0.0, output=f"invalid arguments for {name}: {problems}"
+        )
+    try:
         out = tool.fn(world, args)
     except ToolError as exc:
         world.clock.advance(0.25)
