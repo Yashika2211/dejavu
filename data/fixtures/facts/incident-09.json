@@ -1,0 +1,50 @@
+{
+  "n": 9,
+  "incident_id": "INC-4205",
+  "date": "Mon 31 Aug 2026",
+  "alert_at": "13:30",
+  "onset_at": "13:21",
+  "oncall": "Meera Pillai",
+  "author": "Meera Pillai",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 4,391 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "psp_rate_limit",
+  "culprit_service": "acquirerx",
+  "culprit_owner_team": null,
+  "trigger": null,
+  "discriminators": [
+    "acquirerx HTTP 429 rate far above its normal level",
+    "payments-svc logs rate_limit_exceeded from acquirerx",
+    "internal services are healthy (ledger pool not waiting)",
+    "postgres-ledger CPU is normal"
+  ],
+  "steps": [
+    {
+      "at": "13:42",
+      "minutes_after_alert": 12.0,
+      "action": "psp_failover",
+      "target": "payments-svc",
+      "params": {
+        "to": "paynova"
+      },
+      "outcome": "fixed it",
+      "note": "found INC-4133's postmortem"
+    }
+  ],
+  "page": null,
+  "resolved_at": "13:48",
+  "minutes_alert_to_recovery": 18.0,
+  "mttr_min": 21.0,
+  "impact_minutes": 27.0,
+  "failed_payments": 7925,
+  "inr_at_risk": 14660357,
+  "worked": [
+    "psp_failover payments-svc"
+  ],
+  "did_not_work": [],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
