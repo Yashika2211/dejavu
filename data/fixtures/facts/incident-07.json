@@ -7,7 +7,7 @@
   "oncall": "Tom\u00e1s Ortega",
   "author": "Rohan Mehta",
   "alert_name": "CheckoutLatencyP99High",
-  "alert_description": "checkout-api p99 latency is 5,749 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "alert_description": "checkout-api p99 latency is 5,448 ms on POST /v1/checkout (threshold 2,000 ms)",
   "root_cause_category": "missing_index_slow_query",
   "culprit_service": "postgres-ledger",
   "culprit_owner_team": "Data Platform",
@@ -15,11 +15,11 @@
     "change_id": "chg-f8a8a7",
     "type": "schema_migration",
     "service": "postgres-ledger",
-    "summary": "Flyway V90__repartition_ledger_entries applied by ledger-svc 3.15.1",
+    "summary": "Flyway V88__repartition_ledger_entries applied by ledger-svc 3.15.1",
     "author": "Farhan Qureshi",
     "at": "11:27",
     "details": {
-      "migration": "V90__repartition_ledger_entries",
+      "migration": "V88__repartition_ledger_entries",
       "diff": "recreates ledger_entries as a range-partitioned table (by created_at); indexes created: (id), (created_at)"
     }
   },
@@ -66,8 +66,8 @@
   "minutes_alert_to_recovery": 47.0,
   "mttr_min": 50.0,
   "impact_minutes": 58.0,
-  "failed_payments": 30307,
-  "inr_at_risk": 56068355,
+  "failed_payments": 29304,
+  "inr_at_risk": 54212045,
   "worked": [
     "add_index postgres-ledger"
   ],
