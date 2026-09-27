@@ -1,0 +1,123 @@
+# A fraud-scorer model release swaps the bounded feature cache for an in-process dict. Memory
+# climbs to the 2Gi limit, the kernel OOM-kills the pod, it restarts, and the cycle repeats.
+# While pods restart, checkout-api waits out its 1.5 s timeout and falls back to manual review.
+id: memory_leak_oom
+title: Memory leak in a fraud model release
+symptom_class: latency_p99
+look_alike_group: A
+culprit_service: fraud-scorer
+trigger: deploy
+
+variants:
+  onset: {randint: [-10, -6]}
+  period: {randint: [9, 13]}
+  checkout_p99_add: {randint: [2300, 3300]}
+  failure_share: {uniform: [0.03, 0.06]}
+  author: {choice: [Ishita Bose, Vikram Shetty]}
+
+alert:
+  name: CheckoutLatencyP99High
+  service: checkout-api
+  summary: checkout-api p99 latency above 2s for 5 minutes
+  description: "checkout-api p99 latency is {value} on POST /v1/checkout (threshold 2,000 ms)"
+  metric_service: checkout-api
+  metric: latency_p99_ms
+  threshold: 2000
+  expr: 'histogram_quantile(0.99, sum by (le) (rate(http_server_duration_ms_bucket{service="checkout-api",route="/v1/checkout"}[5m]))) > 2000'
+  runbook: checkout-latency
+  labels: {team: payments}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 5
+
+effects:
+  - event:
+      type: model_release
+      service: fraud-scorer
+      at_offset: -42
+      author: "{{author}}"
+      summary: "fraud-scorer model v{{prev_model_version}} -> v{{model_version}}"
+      trigger: true
+      details:
+        version: "v{{model_version}}"
+        prev_version: "v{{prev_model_version}}"
+        diff: "LightGBM artifact v{{model_version}}: adds merchant_velocity_24h; feature cache moved from the bounded LRU (50k entries) to an in-process dict keyed by merchant and hour"
+        files: ["models/fraud-lgbm-v{{model_version}}.txt", fraud_scorer/features.py]
+
+  - metric_shift: {service: fraud-scorer, metric: mem_bytes, shape: sawtooth, magnitude: 1.25e9, start_offset: -38, period: "{{period}}", noise: 0.01}
+  - metric_shift: {service: fraud-scorer, metric: restarts, shape: spike, magnitude: 1, start_offset: "{{onset}}", period: 4, ramp_minutes: 1, noise: 0}
+  - metric_shift: {service: fraud-scorer, metric: latency_p99_ms, shape: ramp, magnitude: 1350, start_offset: "{{onset}}", ramp_minutes: 3}
+  - metric_shift: {service: fraud-scorer, metric: error_rate_5xx, shape: ramp, magnitude: 8, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.2}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: "{{checkout_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: checkout-api, metric: latency_p50_ms, shape: ramp, magnitude: 350, start_offset: "{{onset}}", ramp_minutes: 4}
+
+  - log_inject:
+      service: fraud-scorer
+      format: k8s_event
+      level: WARN
+      logger: OOMKilled
+      caller: "pod/{pod}"
+      template: "Container fraud-scorer exceeded memory limit (2Gi), exit code 137"
+      rate_per_min: 0.35
+      start_offset: "{{onset - 1}}"
+      vars: {pod: {pod: fraud-scorer}}
+  - log_inject:
+      service: fraud-scorer
+      format: k8s_event
+      level: WARN
+      logger: BackOff
+      caller: "pod/{pod}"
+      template: "Back-off restarting failed container fraud-scorer in pod {pod}"
+      rate_per_min: 0.2
+      start_offset: "{{onset}}"
+      vars: {pod: {pod: fraud-scorer}}
+  - log_inject:
+      service: fraud-scorer
+      level: WARN
+      logger: fraud_scorer.features
+      template: feature cache size
+      fields: {entries: "{e}", approx_bytes: "{b}", model_version: "v{{model_version}}"}
+      rate_per_min: 1
+      start_offset: -36
+      vars: {e: {randint: [1200000, 2600000]}, b: {randint: [900000000, 1800000000]}}
+  - log_inject:
+      service: checkout-api
+      level: WARN
+      template: fraud-scorer timeout, falling back to manual review
+      fields: {reqId: "req-{r}", orderId: "ord_{o}", timeoutMs: 1500}
+      rate_per_min: 25
+      start_offset: "{{onset}}"
+      vars: {r: {hex: 8}, o: {hex: 10}}
+
+  - trace_delay: {service: fraud-scorer, operation: POST /score, add_ms: [1200, 1480], share: 0.35, start_offset: "{{onset}}", error_share: 0.2, error: "timeout after 1500ms"}
+
+discriminators:
+  - text: fraud-scorer pods restarting (OOMKilled, exit code 137)
+    signal: {kind: log, service: fraud-scorer, contains: OOMKilled}
+  - text: fraud-scorer memory saws up to the 2Gi limit and drops at each restart
+    signal: {kind: metric, service: fraud-scorer, metric: mem_bytes, stat: max, op: ">", value: 1.8e9, window_min: 30}
+  - text: restarts are non-zero
+    signal: {kind: metric, service: fraud-scorer, metric: restarts, stat: max, op: ">", value: 0, window_min: 30}
+  - text: a new model artifact was released shortly before the leak started
+    signal: {kind: change, service: fraud-scorer, change_type: model_release, window_min: 90}
+
+relevant_evidence:
+  - [query_metrics, fraud-scorer]
+  - [query_metrics, checkout-api]
+  - [search_logs, fraud-scorer]
+  - [search_logs, checkout-api]
+  - [get_traces, fraud-scorer]
+  - [get_traces, checkout-api]
+  - [get_runbook, fraud-scorer]
+
+correct_remediations:
+  - {action: rollback, target: fraud-scorer, note: "rolling the model back to v{{prev_model_version}} restores the bounded cache"}
+
+ineffective_remediations:
+  - {action: restart, target: fraud-scorer, relief_minutes: 9, depth: 0.3, note: "fresh pods are fine until the cache fills again, about ten minutes later"}
+  - {action: scale_out, target: fraud-scorer, relief_minutes: 14, depth: 0.4, note: "more pods spread the load and delay the next OOM, at extra cost; the leak remains"}
+  - {action: rollback, target: checkout-api, note: "checkout-api only waits on fraud-scorer; nothing to fix there"}
+
+prevention: [canary_rollout, load_test]
