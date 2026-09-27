@@ -16,7 +16,7 @@
     "type": "flag",
     "service": "checkout-api",
     "summary": "flag checkout.retry_policy standard -> aggressive",
-    "author": "Tom\u00e1s Ortega",
+    "author": "Priya Raman",
     "at": "12:10",
     "details": {
       "flag": "checkout.retry_policy",
