@@ -1,0 +1,99 @@
+# chronyd stopped on one worker node; after a hypervisor live migration its clock jumped about
+# 47 seconds behind. Tokens issued elsewhere look like they were issued in the future to pods on
+# that node, so validation there fails with "token used before issued": roughly one request in
+# six, which rules out an expired certificate (that would fail everything).
+id: clock_skew_jwt
+title: Clock skew on one node breaks JWT validation
+symptom_class: auth_failures
+look_alike_group: B
+culprit_service: nodes
+culprit_aliases: ["{{skew_node}}"]
+trigger: infra
+
+variants:
+  onset: {randint: [-10, -6]}
+  skew_node: {node: "of:auth-svc"}
+  skew_ms: {randint: [41000, 58000]}
+  auth_4xx: {uniform: [15, 18]}
+  failure_share: {uniform: [0.12, 0.16]}
+
+alert:
+  name: AuthFailureRateHigh
+  service: auth-svc
+  summary: authentication failure rate above 12% for 5 minutes
+  description: "authentication failure rate is {value} on auth-svc (threshold 12%)"
+  metric_service: auth-svc
+  metric: error_rate_4xx
+  threshold: 12
+  expr: 'sum(rate(http_server_requests_total{service="auth-svc",code="401"}[5m])) / sum(rate(http_server_requests_total{service="auth-svc"}[5m])) > 0.12'
+  runbook: auth-failures
+  labels: {team: identity}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 1
+
+effects:
+  - metric_shift: {service: nodes, node: "{{skew_node}}", metric: node_clock_offset_ms, shape: step, mode: set, magnitude: "{{skew_ms}}", start_offset: "{{onset - 1}}", noise: 0.001}
+  - metric_shift: {service: nodes, node: "{{skew_node}}", metric: node_clock_offset_ms, shape: step, mode: multiply, magnitude: -1, start_offset: "{{onset - 1}}", noise: 0}
+  - metric_shift: {service: auth-svc, metric: error_rate_4xx, shape: ramp, magnitude: "{{auth_4xx}}", start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.06}
+  - metric_shift: {service: edge-gateway, metric: error_rate_4xx, shape: ramp, magnitude: 4, start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.1}
+
+  - log_inject:
+      service: nodes
+      pod: "{{skew_node}}"
+      level: WARN
+      logger: "systemd[1]"
+      template: "chronyd.service: Main process exited, code=killed, status=9/KILL"
+      rate_per_min: 1
+      exact: true
+      start_offset: -170
+      duration: 1
+  - log_inject:
+      service: nodes
+      pod: "{{skew_node}}"
+      level: WARN
+      logger: kernel
+      template: "clocksource: timekeeping watchdog on CPU1: Marking clocksource 'tsc' as unstable because the skew is too large"
+      rate_per_min: 1
+      exact: true
+      start_offset: "{{onset - 1}}"
+      duration: 1
+  - log_inject:
+      service: auth-svc
+      level: WARN
+      caller: token/validator.go:144
+      template: token validation failed
+      fields: {error: "token has invalid claims: token used before issued", kid: "2026-08", node: "{{skew_node}}", sub: "u_{u}"}
+      rate_per_min: 50
+      start_offset: "{{onset}}"
+      ramp_minutes: 1
+      vars: {u: {hex: 8}}
+
+discriminators:
+  - text: one node's clock is tens of seconds off while the others are within milliseconds
+    signal: {kind: metric, service: nodes, metric: node_clock_offset_ms, stat: min, op: "<", value: -5000}
+  - text: auth-svc rejects tokens as used before issued
+    signal: {kind: log, service: auth-svc, contains: used before issued}
+  - text: only a fraction of auth requests fail (not all of them, as an expired cert would cause)
+    signal: {kind: metric, service: auth-svc, metric: error_rate_4xx, op: "<", value: 40}
+
+relevant_evidence:
+  - [query_metrics, auth-svc]
+  - [query_metrics, nodes]
+  - [query_metrics, edge-gateway]
+  - [search_logs, auth-svc]
+  - [search_logs, nodes]
+  - [get_topology, nodes]
+  - [get_runbook, auth-svc]
+
+correct_remediations:
+  - {action: node_drain, target: "{{skew_node}}", note: "cordoning and draining the skewed node moves validation to nodes with a correct clock; then restart chronyd"}
+
+ineffective_remediations:
+  - {action: cert_rotation, target: [edge-gateway, auth-svc], note: "certificates are fine; the clock is wrong"}
+  - {action: restart, target: auth-svc, relief_minutes: 5, depth: 0.5, note: "some pods reschedule onto healthy nodes for a while; others land back on the skewed node"}
+  - {action: rollback, target: auth-svc, note: "no code change caused this"}
+
+prevention: []
