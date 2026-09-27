@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "DejaVu: the on-call agent that has seen this before."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "fpdf2>=2.8",
     "hindsight-client>=0.10.1",
     "httpx>=0.28",
     "openai>=1.60",
