@@ -1,0 +1,144 @@
+# acquirerx starts rate limiting our merchant account. payments-svc retries with backoff, so
+# checkout p99 climbs and payments fail, while every internal service looks healthy. The status
+# page keeps saying "operational" for the first ~20 minutes.
+id: psp_rate_limit
+title: Payment processor rate limiting
+symptom_class: latency_p99
+look_alike_group: A
+culprit_service: acquirerx
+culprit_aliases: [payments-svc]
+trigger: external
+
+variants:
+  onset: {randint: [-12, -7]}
+  rate_429: {uniform: [26, 44]}
+  payments_p99_add: {randint: [3400, 5200]}
+  checkout_p99_add: {randint: [3500, 5400]}
+  failure_share: {uniform: [0.18, 0.30]}
+  herring_pr: {randint: [3440, 3520]}
+
+alert:
+  name: CheckoutLatencyP99High
+  service: checkout-api
+  summary: checkout-api p99 latency above 2s for 5 minutes
+  description: "checkout-api p99 latency is {value} on POST /v1/checkout (threshold 2,000 ms)"
+  metric_service: checkout-api
+  metric: latency_p99_ms
+  threshold: 2000
+  expr: 'histogram_quantile(0.99, sum by (le) (rate(http_server_duration_ms_bucket{service="checkout-api",route="/v1/checkout"}[5m]))) > 2000'
+  runbook: checkout-latency
+  labels: {team: payments}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 4
+
+effects:
+  # red herring: an unrelated checkout-api deploy half an hour earlier
+  - event:
+      type: deploy
+      service: checkout-api
+      at_offset: -34
+      author: Tomás Ortega
+      summary: "checkout-api {{prev_version_checkout_api}} -> {{version_checkout_api}}"
+      incident: false
+      details:
+        version: "{{version_checkout_api}}"
+        prev_version: "{{prev_version_checkout_api}}"
+        pr: "{{herring_pr}}"
+        pr_title: Copy change on UPI intent screen (i18n)
+        files: [locales/en.json, locales/hi.json]
+        lines: "+6 -6"
+
+  - metric_shift: {service: acquirerx, metric: psp_http_429_rate, shape: ramp, magnitude: "{{rate_429}}", start_offset: "{{onset}}", ramp_minutes: 4, noise: 0.1}
+  - metric_shift: {service: acquirerx, metric: psp_latency_p99_ms, shape: ramp, magnitude: 1900, start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: payments-svc, metric: latency_p99_ms, shape: ramp, magnitude: "{{payments_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: payments-svc, metric: latency_p50_ms, shape: ramp, magnitude: 650, start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: payments-svc, metric: error_rate_5xx, shape: ramp, magnitude: 6, start_offset: "{{onset + 1}}", ramp_minutes: 4, noise: 0.15}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: "{{checkout_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: checkout-api, metric: latency_p50_ms, shape: ramp, magnitude: 700, start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: checkout-api, metric: error_rate_5xx, shape: ramp, magnitude: 3, start_offset: "{{onset + 1}}", ramp_minutes: 4, noise: 0.15}
+
+  - log_inject:
+      service: payments-svc
+      level: WARN
+      caller: psp/acquirerx.go:212
+      template: acquirerx charge failed
+      fields: {status: 429, code: rate_limit_exceeded, retry_after_s: 2, merchant_id: "{m}", trace_id: "{t}"}
+      rate_per_min: 70
+      start_offset: "{{onset}}"
+      vars: {m: {choice: [KSTL-00419, KSTL-01877, KSTL-00032, KSTL-02291, KSTL-00764]}, t: {hex: 32}}
+  - log_inject:
+      service: payments-svc
+      level: INFO
+      caller: psp/retry.go:61
+      template: retrying acquirerx charge
+      fields: {attempt: "{a}", backoff_ms: "{b}", trace_id: "{t}"}
+      rate_per_min: 40
+      start_offset: "{{onset}}"
+      vars: {a: {randint: [2, 3]}, b: {randint: [200, 800]}, t: {hex: 32}}
+  - log_inject:
+      service: payments-svc
+      level: ERROR
+      caller: psp/acquirerx.go:231
+      template: charge failed after retries
+      fields: {psp: acquirerx, attempts: 3, last_status: 429, merchant_id: "{m}", trace_id: "{t}"}
+      rate_per_min: 12
+      start_offset: "{{onset + 1}}"
+      vars: {m: {choice: [KSTL-00419, KSTL-01877, KSTL-00032, KSTL-02291, KSTL-00764]}, t: {hex: 32}}
+  - log_inject:
+      service: checkout-api
+      level: ERROR
+      template: payment authorization failed
+      fields: {reqId: "req-{r}", reason: PSP_UNAVAILABLE, upstream: payments-svc, trace_id: "{t}"}
+      rate_per_min: 12
+      start_offset: "{{onset + 1}}"
+      vars: {r: {hex: 8}, t: {hex: 32}}
+
+  - trace_delay: {service: acquirerx, operation: POST /v2/charges, add_ms: [900, 2600], share: 0.5, start_offset: "{{onset}}", error_share: 0.3, error: "HTTP 429 rate_limit_exceeded (retry_after 2s)"}
+
+status_updates:
+  acquirerx:
+    - after_onset_min: 22
+      status: degraded
+      title: "Degraded performance: Card and UPI payments API"
+      message: "We are investigating elevated rate limiting (HTTP 429) affecting a subset of merchants."
+    - after_onset_min: 48
+      status: degraded
+      title: "Identified: Card and UPI payments API"
+      message: "A capacity issue in one processing region is causing rate limiting for some merchants. Mitigation in progress."
+
+discriminators:
+  - text: acquirerx HTTP 429 rate far above its normal level
+    signal: {kind: metric, service: acquirerx, metric: psp_http_429_rate, op: ">", value: 5}
+  - text: payments-svc logs rate_limit_exceeded from acquirerx
+    signal: {kind: log, service: payments-svc, contains: rate_limit_exceeded}
+  - text: internal services are healthy (ledger pool not waiting)
+    signal: {kind: metric, service: ledger-svc, metric: db_pool_pending, op: "<", value: 5}
+  - text: postgres-ledger CPU is normal
+    signal: {kind: metric, service: postgres-ledger, metric: pg_cpu_pct, op: "<", value: 60}
+
+relevant_evidence:
+  - [query_metrics, acquirerx]
+  - [query_metrics, payments-svc]
+  - [query_metrics, checkout-api]
+  - [search_logs, payments-svc]
+  - [search_logs, checkout-api]
+  - [get_traces, payments-svc]
+  - [get_traces, checkout-api]
+  - [check_dependency, acquirerx]
+  - [get_runbook, payments-svc]
+
+correct_remediations:
+  - {action: psp_failover, target: [payments-svc, acquirerx, paynova], note: "routing to paynova (psp.primary=paynova) with backoff enabled stops the failures"}
+  - {action: flag_revert, target: payments-svc, note: "setting psp.primary=paynova moves traffic off acquirerx"}
+
+ineffective_remediations:
+  - {action: rollback, target: payments-svc, note: "nothing changed in payments-svc; there is nothing to roll back"}
+  - {action: rollback, target: checkout-api, note: "the checkout-api deploy was a copy change; unrelated"}
+  - {action: restart, target: payments-svc, note: "restarts do not change how acquirerx treats our traffic"}
+  - {action: scale_out, target: payments-svc, note: "more pods send more requests into the same rate limit"}
+  - {action: pool_tuning, target: ledger-svc, note: "the ledger pool is healthy"}
+
+prevention: []
