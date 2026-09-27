@@ -1,0 +1,122 @@
+# Novel: ap-south-1b loses cross-AZ connectivity (a transit-gateway attachment flaps). Pods on
+# the two AZ-b nodes cannot reach anything in 1a or 1c and vice versa, so roughly a third of
+# calls time out at the TCP layer. It looks like the DNS incident (many services, same minute),
+# but DNS is healthy: these are connect timeouts to 10.42.2.x and 10.42.4.x addresses.
+id: az_network_partition
+title: Availability-zone network partition
+category: novel
+symptom_class: error_rate_5xx
+look_alike_group: null
+culprit_service: nodes
+culprit_aliases: [ip-10-42-2-14, ip-10-42-4-9]
+trigger: infra
+
+variants:
+  onset: {randint: [-8, -5]}
+  edge_5xx: {uniform: [22, 30]}
+  failure_share: {uniform: [0.25, 0.33]}
+
+alert:
+  name: EdgeGateway5xxHigh
+  service: edge-gateway
+  summary: edge-gateway 5xx rate above 5% for 5 minutes
+  description: "edge-gateway 5xx rate is {value} across all routes (threshold 5%)"
+  metric_service: edge-gateway
+  metric: error_rate_5xx
+  threshold: 5
+  expr: 'sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class="5"}[5m])) / sum(rate(envoy_http_downstream_rq_total[5m])) > 0.05'
+  runbook: edge-errors
+  labels: {team: platform}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 1
+
+effects:
+  - metric_shift: {service: edge-gateway, metric: error_rate_5xx, shape: ramp, magnitude: "{{edge_5xx}}", start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.05}
+  - metric_shift: {service: [checkout-api, payments-svc, ledger-svc, auth-svc], metric: error_rate_5xx, shape: ramp, magnitude: 14, start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.1}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: 2400, start_offset: "{{onset}}", ramp_minutes: 1}
+  - metric_shift: {service: edge-gateway, metric: latency_p99_ms, shape: ramp, magnitude: 1800, start_offset: "{{onset}}", ramp_minutes: 1}
+  - metric_shift: {service: auth-svc, metric: latency_p99_ms, shape: ramp, magnitude: 900, start_offset: "{{onset}}", ramp_minutes: 1}
+
+  - log_inject:
+      service: edge-gateway
+      level: INFO
+      template: '"POST /v1/checkout HTTP/2" 503 UF,URX 0 91 {d} - "{ip}" "KestrelPay-Android/7.4.1" "{req}" "checkout-api.prod.svc.cluster.local" "10.42.{z}.{h}:8080"'
+      rate_per_min: 60
+      start_offset: "{{onset}}"
+      vars: {d: {randint: [1000, 1020]}, ip: {choice: ["49.36.112.18", "106.51.77.203", "27.97.14.160"]}, req: {hex: 32}, z: {choice: [2, 4]}, h: {randint: [2, 250]}}
+  - log_inject:
+      service: payments-svc
+      level: ERROR
+      caller: psp/client.go:74
+      template: upstream call failed
+      fields: {upstream: ledger-svc, error: "dial tcp 10.42.{z}.{h}:8080: connect: connection timed out"}
+      rate_per_min: 30
+      start_offset: "{{onset}}"
+      vars: {z: {choice: [2, 4]}, h: {randint: [2, 250]}}
+  - log_inject:
+      service: auth-svc
+      level: ERROR
+      caller: session/store.go:102
+      template: cache call failed
+      fields: {error: "dial tcp 10.42.{z}.{h}:6379: connect: connection timed out"}
+      rate_per_min: 20
+      start_offset: "{{onset}}"
+      vars: {z: {choice: [2, 4]}, h: {randint: [2, 250]}}
+  - log_inject:
+      service: checkout-api
+      level: ERROR
+      template: "connect ETIMEDOUT 10.42.{z}.{h}:8080"
+      fields: {reqId: "req-{r}", code: ETIMEDOUT}
+      rate_per_min: 35
+      start_offset: "{{onset}}"
+      vars: {z: {choice: [2, 4]}, h: {randint: [2, 250]}, r: {hex: 8}}
+  - log_inject:
+      service: nodes
+      pod: ip-10-42-2-14
+      level: WARN
+      logger: "kubelet[1123]"
+      template: 'E{klog}    1123 kubelet_node_status.go:549] "Error updating node status, will retry" err="error getting node \"ip-10-42-2-14\": Get \"https://10.42.0.1:443/api/v1/nodes/ip-10-42-2-14\": dial tcp 10.42.0.1:443: i/o timeout"'
+      rate_per_min: 2
+      start_offset: "{{onset}}"
+  - log_inject:
+      service: nodes
+      pod: ip-10-42-4-9
+      level: WARN
+      logger: "kubelet[1123]"
+      template: 'E{klog}    1123 kubelet_node_status.go:549] "Error updating node status, will retry" err="error getting node \"ip-10-42-4-9\": Get \"https://10.42.0.1:443/api/v1/nodes/ip-10-42-4-9\": dial tcp 10.42.0.1:443: i/o timeout"'
+      rate_per_min: 2
+      start_offset: "{{onset}}"
+
+  - trace_delay: {service: checkout-api, operation: POST /v1/checkout, add_ms: [1000, 1100], share: 0.3, start_offset: "{{onset}}", error_share: 0.3, error: "connect ETIMEDOUT"}
+
+discriminators:
+  - text: errors are TCP connect timeouts to addresses in two subnets
+    signal: {kind: log, service: payments-svc, contains: "connect: connection timed out"}
+  - text: DNS is healthy (CoreDNS latency normal)
+    signal: {kind: metric, service: coredns, metric: latency_p99_ms, op: "<", value: 50}
+  - text: the AZ-b nodes cannot reach the API server
+    signal: {kind: log, service: nodes, contains: Error updating node status}
+
+relevant_evidence:
+  - [query_metrics, edge-gateway]
+  - [query_metrics, coredns]
+  - [query_metrics, nodes]
+  - [search_logs, payments-svc]
+  - [search_logs, checkout-api]
+  - [search_logs, edge-gateway]
+  - [search_logs, nodes]
+  - [get_topology, nodes]
+
+correct_remediations:
+  - {action: node_drain, target: [ip-10-42-2-14, ip-10-42-4-9], note: "cordoning and draining the AZ-b nodes moves workloads to healthy zones"}
+
+ineffective_remediations:
+  - {action: scale_out, target: coredns, note: "DNS is not the problem"}
+  - {action: config_tuning, target: coredns, note: "DNS is not the problem"}
+  - {action: rollback, note: "no change caused this"}
+  - {action: restart, note: "pods may reschedule onto the same partitioned nodes"}
+
+prevention: []
