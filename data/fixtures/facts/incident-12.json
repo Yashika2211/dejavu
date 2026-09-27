@@ -1,0 +1,100 @@
+{
+  "n": 12,
+  "incident_id": "INC-4249",
+  "date": "Sun 06 Sep 2026",
+  "alert_at": "18:55",
+  "onset_at": "18:45",
+  "oncall": "Meera Pillai",
+  "author": "Farhan Qureshi",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 6,621 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "db_pool_exhaustion",
+  "culprit_service": "ledger-svc",
+  "culprit_owner_team": "Core Ledger",
+  "trigger": {
+    "change_id": "chg-604c0e",
+    "type": "deploy",
+    "service": "ledger-svc",
+    "summary": "ledger-svc 3.15.2 -> 3.16.3",
+    "author": "Ananya Iyer",
+    "at": "18:41",
+    "details": {
+      "version": "3.16.3",
+      "prev_version": "3.15.2",
+      "pr": 2241,
+      "pr_title": "Enrich ledger postings with account tier",
+      "diff": "LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block",
+      "files": [
+        "LedgerPostingService.java",
+        "AccountTierClient.java",
+        "LedgerPostingServiceTest.java"
+      ],
+      "lines": "+46 -9"
+    }
+  },
+  "discriminators": [
+    "db_pool_active is pinned at the pool maximum",
+    "postgres-ledger CPU stays normal, so the database itself is not the bottleneck",
+    "clients queue in PgBouncer (pgbouncer_cl_waiting climbs)",
+    "PgBouncer logs query_wait_timeout",
+    "a ledger-svc deploy shortly before the onset"
+  ],
+  "steps": [
+    {
+      "at": "19:01",
+      "minutes_after_alert": 6.0,
+      "action": "pool_tuning",
+      "target": "ledger-svc",
+      "params": {
+        "setting": "maximum-pool-size",
+        "value": "20"
+      },
+      "outcome": "no effect",
+      "note": "followed RB-ledger-pool and raised the HikariCP pool; nothing changed"
+    },
+    {
+      "at": "19:09",
+      "minutes_after_alert": 14.0,
+      "action": "restart",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "brief relief, then relapse",
+      "note": "restarted ledger-svc; three minutes of relief"
+    },
+    {
+      "at": "19:17",
+      "minutes_after_alert": 22.0,
+      "action": "pool_tuning",
+      "target": "pgbouncer-ledger",
+      "params": {
+        "setting": "default_pool_size",
+        "value": "40"
+      },
+      "outcome": "fixed it",
+      "note": "Farhan saw pgbouncer_cl_waiting climbing and raised default_pool_size; rolled back 3.16.3 afterwards"
+    }
+  ],
+  "page": null,
+  "resolved_at": "19:24",
+  "minutes_alert_to_recovery": 29.0,
+  "mttr_min": 32.0,
+  "impact_minutes": 39.0,
+  "failed_payments": 11775,
+  "inr_at_risk": 21783937,
+  "worked": [
+    "pool_tuning pgbouncer-ledger"
+  ],
+  "did_not_work": [
+    "pool_tuning ledger-svc",
+    "restart ledger-svc"
+  ],
+  "made_worse": [],
+  "prevention": [
+    "canary_rollout",
+    "load_test",
+    "pool_config_review"
+  ],
+  "migration_context": "3 days after the PgBouncer migration (M1, 3 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
