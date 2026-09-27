@@ -39,7 +39,7 @@ def check_signal(world: IncidentWorld, sig: Signal) -> tuple[bool, str]:
             window = series.values[series.minutes > start]
             value = _stat(window, sig.stat)
             if sig.relative:
-                before = series.values[(series.minutes <= start) & (series.minutes > start - 60)]
+                before = series.values[(series.minutes <= start) & (series.minutes > start - 20)]
                 value /= max(float(np.median(before)), 1e-9)
             observed.append((node, value))
         hits = [(n, v) for n, v in observed if compare(v, threshold)]
