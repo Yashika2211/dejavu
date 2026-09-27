@@ -11,7 +11,7 @@ import random
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -77,6 +77,7 @@ class SampleContext:
     pods: Mapping[str, Sequence[str]]
     pod_nodes: Mapping[str, str]
     pod_ips: Mapping[str, str]
+    alert_at: datetime
 
 
 class VarSpec(_Model):
@@ -89,11 +90,12 @@ class VarSpec(_Model):
     pod: str | None = None
     pod_ip: str | None = None
     node: str | None = None  # "any", or "of:<service>" for a node hosting that service
+    utc_at: float | None = None  # a fixed moment (minutes after the alert) as an ISO UTC timestamp
     fmt: str | None = None
 
     @model_validator(mode="after")
     def _one_generator(self) -> "VarSpec":
-        keys = ("randint", "uniform", "choice", "hex", "pod", "pod_ip", "node")
+        keys = ("randint", "uniform", "choice", "hex", "pod", "pod_ip", "node", "utc_at")
         if sum(getattr(self, k) is not None for k in keys) != 1:
             raise ValueError(f"exactly one of {keys} must be set")
         return self
@@ -112,6 +114,8 @@ class VarSpec(_Model):
             value = rng.choice(list(ctx.pods[self.pod]))
         elif self.pod_ip is not None:
             value = ctx.pod_ips[rng.choice(list(ctx.pods[self.pod_ip]))]
+        elif self.utc_at is not None:
+            value = f"{(ctx.alert_at + timedelta(minutes=self.utc_at)).astimezone(UTC):%Y-%m-%dT%H:%M:%SZ}"
         else:
             value = _sample_node(str(self.node), rng, ctx)
         return format(value, self.fmt) if self.fmt else value
@@ -170,6 +174,8 @@ class LogInject(_Effect):
     thread: str | None = None
     caller: str | None = None
     format: LogFormat | Literal["k8s_event"] | None = None
+    pod: str | None = None  # pin every line to one pod (or node, for the nodes component)
+    exact: bool = False  # emit exactly `rate_per_min` lines per minute instead of a Poisson draw
 
     _list = field_validator("service", mode="before")(_as_list)
 
@@ -247,6 +253,7 @@ class Signal(_Model):
     change_type: ChangeType | None = None
     window_min: float = 15.0
     min_count: int = 1
+    relative: bool = False  # compare the stat divided by the pre-window baseline median
 
     @model_validator(mode="after")
     def _complete(self) -> "Signal":
@@ -334,7 +341,7 @@ class Archetype(_Model):
     effects: list[Effect]
     discriminators: list[Discriminator]
     relevant_evidence: list[Evidence]
-    correct_remediations: list[RemediationRule]
+    correct_remediations: list[RemediationRule] = Field(default_factory=list)
     ineffective_remediations: list[RemediationRule] = Field(default_factory=list)
     harmful_remediations: list[RemediationRule] = Field(default_factory=list)
     prevention: list[Safeguard] = Field(default_factory=list)
@@ -361,7 +368,7 @@ class Scenario(_Model):
 
     @property
     def sample_context(self) -> SampleContext:
-        return SampleContext(self.pods, self.pod_nodes, self.pod_ips)
+        return SampleContext(self.pods, self.pod_nodes, self.pod_ips, self.alert_at)
 
     @property
     def topology(self) -> Topology:
@@ -409,6 +416,10 @@ def _world_values(topology: Topology, culprit: str, alert_at: datetime) -> dict[
         "prev_model_version": model_version_at(alert_at) - 1,
         "az_b_nodes": [n.name for n in NODES if n.zone == "ap-south-1b"],
     }
+    for service in CADENCES:
+        key = service.replace("-", "_")
+        values[f"version_{key}"] = version_at(service, alert_at)
+        values[f"prev_version_{key}"] = previous_version(service, alert_at)
     if culprit in CADENCES:
         values["version"] = version_at(culprit, alert_at)
         values["prev_version"] = previous_version(culprit, alert_at)
@@ -465,7 +476,7 @@ def instantiate(
     raw = dict(load_archetype(archetype_id))
     topology = topology_at(alert_at)
     pods, pod_nodes, pod_ips = _pods(topology, seed, incident_id)
-    ctx = SampleContext(pods, pod_nodes, pod_ips)
+    ctx = SampleContext(pods, pod_nodes, pod_ips, alert_at)
 
     rng = py_rng(seed, incident_id, "variants")
     variants = {k: VarSpec.model_validate(v) for k, v in raw.pop("variants", {}).items()}
