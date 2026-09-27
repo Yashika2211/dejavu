@@ -1,0 +1,90 @@
+{
+  "n": 4,
+  "incident_id": "INC-4150",
+  "date": "Sat 22 Aug 2026",
+  "alert_at": "10:15",
+  "onset_at": "10:09",
+  "oncall": "Priya Raman",
+  "author": "Ishita Bose",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 3,226 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "memory_leak_oom",
+  "culprit_service": "fraud-scorer",
+  "culprit_owner_team": "Risk ML",
+  "trigger": {
+    "change_id": "chg-92e8a5",
+    "type": "model_release",
+    "service": "fraud-scorer",
+    "summary": "fraud-scorer model v46 -> v47",
+    "author": "Vikram Shetty",
+    "at": "09:33",
+    "details": {
+      "version": "v47",
+      "prev_version": "v46",
+      "diff": "LightGBM artifact v47: adds merchant_velocity_24h; feature cache moved from the bounded LRU (50k entries) to an in-process dict keyed by merchant and hour",
+      "files": [
+        "models/fraud-lgbm-v47.txt",
+        "fraud_scorer/features.py"
+      ]
+    }
+  },
+  "discriminators": [
+    "fraud-scorer pods restarting (OOMKilled, exit code 137)",
+    "fraud-scorer memory saws up to the 2Gi limit and drops at each restart",
+    "restarts are non-zero",
+    "a new model artifact was released shortly before the leak started"
+  ],
+  "steps": [
+    {
+      "at": "10:20",
+      "minutes_after_alert": 5.0,
+      "action": "restart",
+      "target": "fraud-scorer",
+      "params": {},
+      "outcome": "brief relief, then relapse",
+      "note": "restarted fraud-scorer; OOMs resumed about ten minutes later"
+    },
+    {
+      "at": "10:33",
+      "minutes_after_alert": 18.0,
+      "action": "scale_out",
+      "target": "fraud-scorer",
+      "params": {
+        "replicas": "6"
+      },
+      "outcome": "brief relief, then relapse",
+      "note": "scaled fraud-scorer from 3 to 6 pods to buy time"
+    },
+    {
+      "at": "10:42",
+      "minutes_after_alert": 27.0,
+      "action": "rollback",
+      "target": "fraud-scorer",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Ishita rolled the model back to v46"
+    }
+  ],
+  "page": null,
+  "resolved_at": "10:52",
+  "minutes_alert_to_recovery": 37.0,
+  "mttr_min": 40.0,
+  "impact_minutes": 43.0,
+  "failed_payments": 776,
+  "inr_at_risk": 1435348,
+  "worked": [
+    "rollback fraud-scorer"
+  ],
+  "did_not_work": [
+    "restart fraud-scorer",
+    "scale_out fraud-scorer"
+  ],
+  "made_worse": [],
+  "prevention": [
+    "canary_rollout",
+    "load_test"
+  ],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
