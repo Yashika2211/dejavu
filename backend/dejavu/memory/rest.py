@@ -108,9 +108,7 @@ class HindsightRest:
 
     async def get_document(self, bank_id: str, document_id: str) -> dict[str, Any]:
         """Stored document, including its (Memory Defense-scrubbed) original text."""
-        return await self._request(
-            "GET", f"{self._bank(bank_id)}/documents/{quote(document_id, safe='')}"
-        )
+        return await self._request("GET", f"{self._bank(bank_id)}/documents/{quote(document_id, safe='')}")
 
     # graph and entities -----------------------------------------------------------------
 
