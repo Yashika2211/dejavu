@@ -17,15 +17,17 @@ _MASKS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b[a-z]+_[0-9a-f]{6,}\b"), "<id>"),
     (re.compile(r"\b0x[0-9a-f]+\b"), "<hex>"),
     (re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b"), "<hex>"),
-    (re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?(?![\w])"), "<n>"),
+    (re.compile(r"(?<![\w./\u00a7])-?\d+(?:\.\d+)*(?![\w])"), "<n>"),
 )
+# HTTP status codes carry meaning (200 vs 503), so they are shielded from number masking.
+_STATUS = re.compile(r'(?<=HTTP/\d" )(\d{3})')
 
 
 def template_of(message: str) -> str:
-    out = message
+    out = _STATUS.sub("\u00a7\\1", message)
     for pattern, token in _MASKS:
         out = pattern.sub(token, out)
-    return out
+    return out.replace("\u00a7", "")
 
 
 @dataclass
