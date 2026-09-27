@@ -253,7 +253,7 @@ class Signal(_Model):
     change_type: ChangeType | None = None
     window_min: float = 15.0
     min_count: int = 1
-    relative: bool = False  # compare the stat divided by the pre-window baseline median
+    relative: bool = False  # divide the stat by the median of the 20 minutes before the window
 
     @model_validator(mode="after")
     def _complete(self) -> "Signal":
