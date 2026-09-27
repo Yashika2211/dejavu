@@ -1,0 +1,67 @@
+{
+  "n": 15,
+  "incident_id": "INC-4293",
+  "date": "Sat 12 Sep 2026",
+  "alert_at": "16:25",
+  "onset_at": "16:15",
+  "oncall": "Deepak Rao",
+  "author": "Vikram Shetty",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 3,855 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "memory_leak_oom",
+  "culprit_service": "fraud-scorer",
+  "culprit_owner_team": "Risk ML",
+  "trigger": {
+    "change_id": "chg-63c54c",
+    "type": "model_release",
+    "service": "fraud-scorer",
+    "summary": "fraud-scorer model v51 -> v52",
+    "author": "Vikram Shetty",
+    "at": "15:43",
+    "details": {
+      "version": "v52",
+      "prev_version": "v51",
+      "diff": "LightGBM artifact v52: adds merchant_velocity_24h; feature cache moved from the bounded LRU (50k entries) to an in-process dict keyed by merchant and hour",
+      "files": [
+        "models/fraud-lgbm-v52.txt",
+        "fraud_scorer/features.py"
+      ]
+    }
+  },
+  "discriminators": [
+    "fraud-scorer pods restarting (OOMKilled, exit code 137)",
+    "fraud-scorer memory saws up to the 2Gi limit and drops at each restart",
+    "restarts are non-zero",
+    "a new model artifact was released shortly before the leak started"
+  ],
+  "steps": [
+    {
+      "at": "16:31",
+      "minutes_after_alert": 6.0,
+      "action": "rollback",
+      "target": "fraud-scorer",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "recognised the INC-4150 pattern and rolled the model back to v51"
+    }
+  ],
+  "page": null,
+  "resolved_at": "16:41",
+  "minutes_alert_to_recovery": 16.0,
+  "mttr_min": 19.0,
+  "impact_minutes": 26.0,
+  "failed_payments": 634,
+  "inr_at_risk": 1172240,
+  "worked": [
+    "rollback fraud-scorer"
+  ],
+  "did_not_work": [],
+  "made_worse": [],
+  "prevention": [
+    "canary_rollout",
+    "load_test"
+  ],
+  "migration_context": "9 days after the PgBouncer migration (M1, 3 Sep); 2 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
