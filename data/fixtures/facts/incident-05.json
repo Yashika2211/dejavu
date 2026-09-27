@@ -1,0 +1,73 @@
+{
+  "n": 5,
+  "incident_id": "INC-4165",
+  "date": "Mon 24 Aug 2026",
+  "alert_at": "19:42",
+  "onset_at": "19:32",
+  "oncall": "Tom\u00e1s Ortega",
+  "author": "Ananya Iyer",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 7,744 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "db_pool_exhaustion",
+  "culprit_service": "ledger-svc",
+  "culprit_owner_team": "Core Ledger",
+  "trigger": {
+    "change_id": "chg-0044b2",
+    "type": "deploy",
+    "service": "ledger-svc",
+    "summary": "ledger-svc 3.15.0 -> 3.15.1",
+    "author": "Ananya Iyer",
+    "at": "19:28",
+    "details": {
+      "version": "3.15.1",
+      "prev_version": "3.15.0",
+      "pr": 2199,
+      "pr_title": "Enrich ledger postings with account tier",
+      "diff": "LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block",
+      "files": [
+        "LedgerPostingService.java",
+        "AccountTierClient.java",
+        "LedgerPostingServiceTest.java"
+      ],
+      "lines": "+46 -9"
+    }
+  },
+  "discriminators": [
+    "db_pool_pending stays above zero while db_pool_active is pinned at the pool maximum",
+    "db_pool_active is pinned at the pool maximum",
+    "postgres-ledger CPU stays normal, so the database itself is not the bottleneck",
+    "slow spans wait in HikariPool.getConnection",
+    "a ledger-svc deploy shortly before the onset"
+  ],
+  "steps": [
+    {
+      "at": "19:49",
+      "minutes_after_alert": 7.0,
+      "action": "rollback",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "recognised the INC-4127 pattern and rolled back straight away"
+    }
+  ],
+  "page": null,
+  "resolved_at": "19:59",
+  "minutes_alert_to_recovery": 17.0,
+  "mttr_min": 20.0,
+  "impact_minutes": 27.0,
+  "failed_payments": 16120,
+  "inr_at_risk": 29821138,
+  "worked": [
+    "rollback ledger-svc"
+  ],
+  "did_not_work": [],
+  "made_worse": [],
+  "prevention": [
+    "canary_rollout",
+    "load_test",
+    "pool_config_review"
+  ],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
