@@ -1,0 +1,115 @@
+# A feature flag switches checkout-api to an aggressive retry policy (6 attempts, 50 ms backoff).
+# No deploy. Every slow payments-svc response is retried up to six times, payments-svc RPS
+# triples while user traffic stays flat, it starts shedding load with 503s, and the storm feeds
+# itself.
+id: retry_storm
+title: Retry storm from an aggressive retry policy flag
+symptom_class: error_rate_5xx
+look_alike_group: null
+culprit_service: checkout-api
+trigger: flag
+
+variants:
+  onset: {randint: [-9, -6]}
+  amplification: {uniform: [3.2, 4.6]}
+  error_add: {uniform: [18, 30]}
+  failure_share: {uniform: [0.2, 0.3]}
+  exp: {randint: [320, 360]}
+
+alert:
+  name: PaymentsErrorRateHigh
+  service: payments-svc
+  summary: payments-svc 5xx error rate above 5% for 5 minutes
+  description: "payments-svc 5xx error rate is {value} (threshold 5%)"
+  metric_service: payments-svc
+  metric: error_rate_5xx
+  threshold: 5
+  expr: 'sum(rate(http_server_requests_total{service="payments-svc",code=~"5.."}[5m])) / sum(rate(http_server_requests_total{service="payments-svc"}[5m])) > 0.05'
+  runbook: payments-errors
+  labels: {team: payments}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 3
+
+effects:
+  - event:
+      type: flag
+      service: checkout-api
+      at_offset: "{{onset - 3}}"
+      author: Tomás Ortega
+      summary: "flag checkout.retry_policy standard -> aggressive"
+      trigger: true
+      details:
+        flag: checkout.retry_policy
+        from: standard
+        to: aggressive
+        diff: "EXP-{{exp}}: retry UPI collect calls more eagerly (maxAttempts 2 -> 6, backoff 400 ms -> 50 ms)"
+
+  - metric_shift: {service: payments-svc, metric: rps, shape: ramp, mode: multiply, magnitude: "{{amplification}}", start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.05}
+  - metric_shift: {service: payments-svc, metric: error_rate_5xx, shape: ramp, magnitude: "{{error_add}}", start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.1}
+  - metric_shift: {service: payments-svc, metric: latency_p99_ms, shape: ramp, magnitude: 1800, start_offset: "{{onset}}", ramp_minutes: 3}
+  - metric_shift: {service: payments-svc, metric: cpu_cores, shape: ramp, mode: multiply, magnitude: 2.6, start_offset: "{{onset}}", ramp_minutes: 3}
+  - metric_shift: {service: checkout-api, metric: error_rate_5xx, shape: ramp, magnitude: 6, start_offset: "{{onset + 1}}", ramp_minutes: 3, noise: 0.15}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: 1100, start_offset: "{{onset}}", ramp_minutes: 3}
+  - metric_shift: {service: acquirerx, metric: psp_latency_p99_ms, shape: ramp, magnitude: 140, start_offset: "{{onset}}", ramp_minutes: 3}
+
+  - log_inject:
+      service: checkout-api
+      level: WARN
+      template: retrying payments-svc call
+      fields: {reqId: "req-{r}", attempt: "{a}", maxAttempts: 6, backoffMs: 50, orderId: "ord_{o}"}
+      rate_per_min: 90
+      start_offset: "{{onset}}"
+      vars: {r: {hex: 8}, a: {randint: [2, 6]}, o: {hex: 10}}
+  - log_inject:
+      service: checkout-api
+      level: ERROR
+      template: "circuit breaker open for payments-svc (Breaker is open)"
+      fields: {reqId: "req-{r}", upstream: payments-svc}
+      rate_per_min: 8
+      start_offset: "{{onset + 2}}"
+      vars: {r: {hex: 8}}
+  - log_inject:
+      service: payments-svc
+      level: ERROR
+      caller: server/limiter.go:47
+      template: "request rejected: server overloaded"
+      fields: {status: 503, inflight: "{i}", limit: 400, trace_id: "{t}"}
+      rate_per_min: 60
+      start_offset: "{{onset}}"
+      vars: {i: {randint: [430, 640]}, t: {hex: 32}}
+
+  - trace_delay: {service: payments-svc, operation: Charge, add_ms: [200, 900], share: 0.5, start_offset: "{{onset}}", error_share: 0.3, error: "503 server overloaded"}
+
+discriminators:
+  - text: payments-svc request rate is several times its baseline
+    signal: {kind: metric, service: payments-svc, metric: rps, op: ">", value: 2.5, relative: true}
+  - text: user traffic at the edge is flat
+    signal: {kind: metric, service: edge-gateway, metric: rps, op: "<", value: 1.4, relative: true}
+  - text: checkout-api logs show retries and an open circuit breaker
+    signal: {kind: log, service: checkout-api, contains: circuit breaker open}
+  - text: a feature flag flipped on checkout-api minutes before the onset
+    signal: {kind: change, service: checkout-api, change_type: flag, window_min: 60}
+
+relevant_evidence:
+  - [query_metrics, payments-svc]
+  - [query_metrics, checkout-api]
+  - [query_metrics, edge-gateway]
+  - [search_logs, checkout-api]
+  - [search_logs, payments-svc]
+  - [get_traces, payments-svc]
+  - [get_traces, checkout-api]
+
+correct_remediations:
+  - {action: flag_revert, target: checkout-api, note: "setting checkout.retry_policy back to standard stops the amplification within a minute"}
+
+ineffective_remediations:
+  - {action: scale_out, target: payments-svc, note: "more pods absorb more retries, which are retried again; expensive and ineffective"}
+  - {action: restart, target: checkout-api, relief_minutes: 2, depth: 0.4, note: "restarts briefly reset connection pools; the flag still applies"}
+  - {action: restart, target: payments-svc, relief_minutes: 2, depth: 0.7, note: "briefly sheds in-flight work, then the retries return"}
+  - {action: rollback, target: checkout-api, note: "no deploy caused this; the flag survives a rollback"}
+  - {action: psp_failover, target: [payments-svc, acquirerx, paynova], note: "the PSP is not the problem"}
+
+prevention: [flag_guard, canary_rollout, load_test]
