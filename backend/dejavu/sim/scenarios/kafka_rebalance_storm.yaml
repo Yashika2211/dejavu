@@ -1,0 +1,139 @@
+# A notifications-worker deploy renders OTP templates through a new engine that fetches assets
+# from S3 per message. A 500-record batch now takes longer than max.poll.interval.ms, so members
+# are kicked out of the group, the group rebalances, and lag climbs. OTPs arrive after they
+# expire, which shows up as authentication failures: it looks like an auth problem.
+id: kafka_rebalance_storm
+title: Kafka consumer rebalance storm delays OTPs
+symptom_class: auth_failures
+look_alike_group: B
+culprit_service: notifications-worker
+trigger: deploy
+
+variants:
+  onset: {randint: [-10, -7]}
+  lag_peak: {randint: [18000, 30000]}
+  auth_4xx: {uniform: [12, 15]}
+  failure_share: {uniform: [0.08, 0.12]}
+  pr: {randint: [900, 960]}
+  author: {choice: [Lena Fischer, Kofi Mensah]}
+
+alert:
+  name: AuthFailureRateHigh
+  service: auth-svc
+  summary: authentication failure rate above 12% for 5 minutes
+  description: "authentication failure rate is {value} on auth-svc (threshold 12%)"
+  metric_service: auth-svc
+  metric: error_rate_4xx
+  threshold: 12
+  expr: 'sum(rate(http_server_requests_total{service="auth-svc",code="401"}[5m])) / sum(rate(http_server_requests_total{service="auth-svc"}[5m])) > 0.12'
+  runbook: auth-failures
+  labels: {team: identity}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 6
+
+effects:
+  - event:
+      type: deploy
+      service: notifications-worker
+      at_offset: "{{onset - 6}}"
+      author: "{{author}}"
+      summary: "notifications-worker {{prev_version}} -> {{version}}"
+      trigger: true
+      details:
+        version: "{{version}}"
+        prev_version: "{{prev_version}}"
+        pr: "{{pr}}"
+        pr_title: Render OTP SMS with the shared template engine
+        diff: "OtpTemplateRenderer now renders through TemplateEngine v2, which loads brand assets from S3 for every message"
+        files: [OtpTemplateRenderer.kt, TemplateEngineConfig.kt, build.gradle.kts]
+        lines: "+133 -41"
+
+  - metric_shift: {service: notifications-worker, metric: kafka_consumer_lag, shape: ramp, magnitude: "{{lag_peak}}", start_offset: "{{onset - 3}}", ramp_minutes: 30, noise: 0.05}
+  - metric_shift: {service: notifications-worker, metric: kafka_rebalances, shape: oscillate, magnitude: 5, start_offset: "{{onset - 3}}", period: 3, noise: 0.2}
+  - metric_shift: {service: notifications-worker, metric: rps, shape: ramp, mode: multiply, magnitude: 0.35, start_offset: "{{onset - 3}}", ramp_minutes: 3}
+  - metric_shift: {service: notifications-worker, metric: error_rate_5xx, shape: ramp, magnitude: 2, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.2}
+  - metric_shift: {service: auth-svc, metric: error_rate_4xx, shape: ramp, magnitude: "{{auth_4xx}}", start_offset: "{{onset}}", ramp_minutes: 5, noise: 0.06}
+
+  - log_inject:
+      service: notifications-worker
+      level: WARN
+      logger: o.a.k.c.c.internals.ConsumerCoordinator
+      thread: ntainer#0-0-C-1
+      template: "[Consumer clientId=notifications-worker-{n}, groupId=notifications] Member notifications-worker-{n}-{h} sending LeaveGroup request to coordinator kafka-{b}:9092 due to consumer poll timeout has expired. This means the time between subsequent calls to poll() was longer than the configured max.poll.interval.ms, which typically implies that the poll loop is spending too much time processing messages."
+      rate_per_min: 3
+      start_offset: "{{onset - 3}}"
+      vars: {n: {randint: [0, 3]}, h: {hex: 4}, b: {randint: [0, 2]}}
+  - log_inject:
+      service: notifications-worker
+      level: INFO
+      logger: o.a.k.c.c.internals.ConsumerCoordinator
+      thread: ntainer#0-0-C-1
+      template: "[Consumer clientId=notifications-worker-{n}, groupId=notifications] Revoke previously assigned partitions otp-requests-{p}, otp-requests-{q}"
+      rate_per_min: 4
+      start_offset: "{{onset - 3}}"
+      vars: {n: {randint: [0, 3]}, p: {randint: [0, 5]}, q: {randint: [6, 11]}}
+  - log_inject:
+      service: notifications-worker
+      level: INFO
+      logger: c.k.notify.otp.OtpTemplateRenderer
+      thread: ntainer#0-0-C-1
+      template: "rendered template otp_sms_v2 in {ms} ms (assets fetched from s3://kestrel-brand-assets)"
+      rate_per_min: 20
+      start_offset: "{{onset - 5}}"
+      vars: {ms: {randint: [800, 2400]}}
+  - log_inject:
+      service: kafka
+      level: INFO
+      logger: kafka.coordinator.group.GroupCoordinator
+      template: "[GroupCoordinator {b}]: Preparing to rebalance group notifications in state PreparingRebalance with old generation {g} (__consumer_offsets-31) (reason: Removing member notifications-worker-{n}-{h} on LeaveGroup; client reason: consumer poll timeout has expired)"
+      rate_per_min: 3
+      start_offset: "{{onset - 3}}"
+      vars: {b: {randint: [0, 2]}, g: {randint: [140, 190]}, n: {randint: [0, 3]}, h: {hex: 4}}
+  - log_inject:
+      service: auth-svc
+      level: WARN
+      caller: otp/verify.go:71
+      template: otp verification failed
+      fields: {reason: otp_expired, user_id: "u_{u}", channel: sms}
+      rate_per_min: 25
+      start_offset: "{{onset}}"
+      ramp_minutes: 4
+      vars: {u: {hex: 8}}
+
+discriminators:
+  - text: notifications-worker consumer lag climbs steadily
+    signal: {kind: metric, service: notifications-worker, metric: kafka_consumer_lag, stat: max, op: ">", value: 4000}
+  - text: the consumer group keeps rebalancing
+    signal: {kind: metric, service: notifications-worker, metric: kafka_rebalances, stat: max, op: ">", value: 1}
+  - text: members leave the group because poll() took longer than max.poll.interval.ms
+    signal: {kind: log, service: notifications-worker, contains: LeaveGroup}
+  - text: auth failures are OTP expiries, not token or certificate errors
+    signal: {kind: log, service: auth-svc, contains: otp_expired}
+  - text: a notifications-worker deploy shortly before
+    signal: {kind: change, service: notifications-worker, change_type: deploy, window_min: 60}
+
+relevant_evidence:
+  - [query_metrics, notifications-worker]
+  - [query_metrics, auth-svc]
+  - [query_metrics, kafka]
+  - [search_logs, notifications-worker]
+  - [search_logs, auth-svc]
+  - [search_logs, kafka]
+  - [get_runbook, notifications-worker]
+
+correct_remediations:
+  - {action: rollback, target: notifications-worker, note: "rolling back to {{prev_version}} restores fast rendering; the group stabilises and lag drains"}
+  - {action: config_tuning, target: notifications-worker, note: "raising max.poll.interval.ms (or lowering max.poll.records) keeps members in the group"}
+
+ineffective_remediations:
+  - {action: restart, target: notifications-worker, relief_minutes: 3, depth: 0.6, note: "a restart resets the group briefly; the slow batches return"}
+  - {action: cert_rotation, target: [edge-gateway, auth-svc], note: "certificates are fine"}
+  - {action: restart, target: auth-svc, note: "auth-svc is only reporting the expired OTPs"}
+
+harmful_remediations:
+  - {action: scale_out, target: notifications-worker, worsen: 1.4, consequence_minutes: 6, note: "every new consumer triggers another rebalance; lag grows faster"}
+
+prevention: [canary_rollout, load_test]
