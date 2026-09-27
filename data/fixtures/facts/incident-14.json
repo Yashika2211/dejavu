@@ -53,7 +53,7 @@
   ],
   "made_worse": [],
   "prevention": [],
-  "migration_context": "7 days after the PgBouncer migration (M1, 3 Sep); 0 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "migration_context": "7 days after the PgBouncer migration (M1, 3 Sep); 12 hours after the Redis to Valkey migration (M2, 10 Sep)",
   "extras": [],
   "external_resolution": null
 }
