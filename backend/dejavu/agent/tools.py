@@ -133,6 +133,11 @@ def _hm_at(world: IncidentWorld, minute: float) -> str:
     return fmt_hm(world.clock.at(minute))
 
 
+def _num(value: float, unit: str) -> str:
+    """Numbers inside a metric summary: keep short units, drop long ones (they are in the header)."""
+    return fmt_value(value, unit if unit in ("ms", "%", "bytes", "ratio") else "")
+
+
 def _series_summary(
     world: IncidentWorld, minutes: np.ndarray, values: np.ndarray, window: int, unit: str
 ) -> list[str]:
@@ -142,14 +147,14 @@ def _series_summary(
     before = (minutes <= now - window) & (minutes > now - window - 60)
     base_v = values[before] if before.any() else values[: max(5, len(values) // 10)]
     lines = [
-        f"now {fmt_value(float(win_v[-3:].mean()), unit)} | window min {fmt_value(float(win_v.min()), unit)}"
-        f" p50 {fmt_value(float(np.median(win_v)), unit)} max {fmt_value(float(win_v.max()), unit)}"
-        f" | baseline (hour before window) p50 {fmt_value(float(np.median(base_v)), unit)}",
+        f"now {_num(float(win_v[-3:].mean()), unit)} | window min {_num(float(win_v.min()), unit)}"
+        f" p50 {_num(float(np.median(win_v)), unit)} max {_num(float(win_v.max()), unit)}"
+        f" | baseline (hour before window) p50 {_num(float(np.median(base_v)), unit)}",
     ]
     cp = change_point(win_v)
     if cp:
         lines.append(
-            f"change point {_hm_at(world, float(win_m[cp.index]))} IST: {fmt_value(cp.before, unit)} -> {fmt_value(cp.after, unit)}"
+            f"change point {_hm_at(world, float(win_m[cp.index]))} IST: {_num(cp.before, unit)} -> {_num(cp.after, unit)}"
         )
     else:
         lines.append("no significant change point in window")
@@ -211,8 +216,8 @@ def query_metrics(world: IncidentWorld, a: MetricsArgs) -> str:
         zone = next(n.zone for n in NODES if n.name == node)
         win = s.values[s.minutes > world.now_min - a.window_min]
         blocks.append(
-            f"{node} ({zone}): now {fmt_value(float(win[-3:].mean()), unit)}, window min {fmt_value(float(win.min()), unit)}"
-            f" max {fmt_value(float(win.max()), unit)}  {sparkline(win, 12)}"
+            f"{node} ({zone}): now {_num(float(win[-3:].mean()), unit)}, window min {_num(float(win.min()), unit)}"
+            f" max {_num(float(win.max()), unit)}  {sparkline(win, 12)}"
         )
     return "\n".join([header, *blocks])
 
