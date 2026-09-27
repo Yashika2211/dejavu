@@ -1,0 +1,106 @@
+# A cost-saving Helm change cuts payments-svc's CPU limit from 2000m to 500m per pod. Under
+# daytime load the pods hit the CFS quota; requests queue and checkout p99 climbs. Throttling
+# is silent in the logs; the metrics give it away.
+id: cpu_throttling
+title: CPU throttling after a limits change
+symptom_class: latency_p99
+look_alike_group: A
+culprit_service: payments-svc
+trigger: config
+
+variants:
+  onset: {randint: [-11, -7]}
+  throttle: {uniform: [0.46, 0.68]}
+  payments_p99_add: {randint: [2600, 4000]}
+  checkout_p99_add: {randint: [3000, 4400]}
+  failure_share: {uniform: [0.1, 0.18]}
+  ticket: {randint: [210, 260]}
+
+alert:
+  name: CheckoutLatencyP99High
+  service: checkout-api
+  summary: checkout-api p99 latency above 2s for 5 minutes
+  description: "checkout-api p99 latency is {value} on POST /v1/checkout (threshold 2,000 ms)"
+  metric_service: checkout-api
+  metric: latency_p99_ms
+  threshold: 2000
+  expr: 'histogram_quantile(0.99, sum by (le) (rate(http_server_duration_ms_bucket{service="checkout-api",route="/v1/checkout"}[5m]))) > 2000'
+  runbook: checkout-latency
+  labels: {team: payments}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 4
+
+effects:
+  - event:
+      type: helm
+      service: payments-svc
+      at_offset: "{{onset - 2}}"
+      author: Deepak Rao
+      summary: "payments-svc values: resources.limits.cpu 2000m -> 500m"
+      trigger: true
+      details:
+        key: resources.limits.cpu
+        from: 2000m
+        to: 500m
+        diff: "right-size CPU limits to p95 usage for cost savings (FINOPS-{{ticket}})"
+
+  - metric_shift: {service: payments-svc, metric: cpu_throttle_ratio, shape: ramp, mode: set, magnitude: "{{throttle}}", start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.05}
+  - metric_shift: {service: payments-svc, metric: cpu_cores, shape: ramp, mode: set, magnitude: 1.98, start_offset: "{{onset}}", ramp_minutes: 2, noise: 0.005}
+  - metric_shift: {service: payments-svc, metric: latency_p99_ms, shape: ramp, magnitude: "{{payments_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: payments-svc, metric: latency_p50_ms, shape: ramp, magnitude: 900, start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: payments-svc, metric: error_rate_5xx, shape: ramp, magnitude: 2.5, start_offset: "{{onset + 2}}", ramp_minutes: 4, noise: 0.2}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: "{{checkout_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 4}
+  - metric_shift: {service: checkout-api, metric: latency_p50_ms, shape: ramp, magnitude: 800, start_offset: "{{onset}}", ramp_minutes: 4}
+
+  - log_inject:
+      service: payments-svc
+      level: WARN
+      caller: server/middleware.go:88
+      template: slow request
+      fields: {handler: /v1/charges, duration_ms: "{d}", trace_id: "{t}"}
+      rate_per_min: 25
+      start_offset: "{{onset + 1}}"
+      vars: {d: {randint: [1800, 5200]}, t: {hex: 32}}
+  - log_inject:
+      service: checkout-api
+      level: WARN
+      template: payments-svc slow response
+      fields: {reqId: "req-{r}", upstream: payments-svc, durationMs: "{d}", trace_id: "{t}"}
+      rate_per_min: 15
+      start_offset: "{{onset + 1}}"
+      vars: {r: {hex: 8}, d: {randint: [2100, 5600]}, t: {hex: 32}}
+
+  - trace_delay: {service: payments-svc, operation: Charge, add_ms: [1500, 3600], share: 0.8, start_offset: "{{onset}}"}
+
+discriminators:
+  - text: payments-svc CPU throttle ratio above 0.4
+    signal: {kind: metric, service: payments-svc, metric: cpu_throttle_ratio, op: ">", value: 0.4}
+  - text: payments-svc CPU usage pinned at its (new) limit
+    signal: {kind: metric, service: payments-svc, metric: cpu_cores, op: ">", value: 1.9}
+  - text: a Helm values change on payments-svc just before the onset
+    signal: {kind: change, service: payments-svc, change_type: helm, window_min: 60}
+  - text: slow spans are payments-svc's own work, not acquirerx
+    signal: {kind: trace, service: payments-svc, operation: Charge, min_delay_ms: 1200}
+
+relevant_evidence:
+  - [query_metrics, payments-svc]
+  - [query_metrics, checkout-api]
+  - [query_metrics, acquirerx]
+  - [search_logs, payments-svc]
+  - [search_logs, checkout-api]
+  - [get_traces, payments-svc]
+  - [get_traces, checkout-api]
+
+correct_remediations:
+  - {action: limits_revert, target: payments-svc, note: "restoring the 2000m CPU limit ends the throttling within minutes"}
+  - {action: rollback, target: payments-svc, note: "helm rollback restores the previous values, including the CPU limit"}
+
+ineffective_remediations:
+  - {action: restart, target: payments-svc, note: "new pods get the same 500m limit"}
+  - {action: scale_out, target: payments-svc, depth: 0.55, note: "more pods add CPU in total; partial relief at higher cost"}
+  - {action: psp_failover, target: [payments-svc, acquirerx, paynova], note: "the PSP is healthy; failover changes nothing"}
+
+prevention: [owner_review, load_test, canary_rollout]
