@@ -1,0 +1,121 @@
+# The cache primary's node was drained for maintenance; Sentinel failed over to a replica that
+# was mid full-resync, so the new primary came up nearly empty. Every balance lookup misses and
+# falls through to postgres-ledger, which saturates. After M2 the cache is valkey-cache and the
+# old runbook's redis-cli commands point at a host that no longer exists.
+id: cache_stampede
+title: Cold cache after a Sentinel failover
+symptom_class: latency_p99
+look_alike_group: C
+culprit_service: "{{cache}}"
+culprit_aliases: [ledger-svc]
+trigger: infra
+
+variants:
+  onset: {randint: [-9, -5]}
+  hit_ratio: {uniform: [0.02, 0.08]}
+  ledger_p99_add: {randint: [2400, 4200]}
+  failure_share: {uniform: [0.08, 0.13]}
+
+alert:
+  name: LedgerLatencyP99High
+  service: ledger-svc
+  summary: ledger-svc p99 latency above 1s for 5 minutes
+  description: "ledger-svc p99 latency is {value} (threshold 1,000 ms)"
+  metric_service: ledger-svc
+  metric: latency_p99_ms
+  threshold: 1000
+  expr: 'histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{service="ledger-svc"}[5m]))) > 1'
+  runbook: ledger-latency
+  labels: {team: core-ledger}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 3
+
+effects:
+  - metric_shift: {service: "{{cache}}", metric: cache_hit_ratio, shape: ramp, mode: set, magnitude: "{{hit_ratio}}", start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.2}
+  - metric_shift: {service: "{{cache}}", metric: rps, shape: ramp, mode: multiply, magnitude: 1.3, start_offset: "{{onset}}", ramp_minutes: 2}
+  - metric_shift: {service: "{{cache}}", metric: latency_p99_ms, shape: ramp, magnitude: 3, start_offset: "{{onset}}", ramp_minutes: 2}
+  - metric_shift: {service: postgres-ledger, metric: pg_cpu_pct, shape: ramp, mode: set, magnitude: 93, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.02}
+  - metric_shift: {service: postgres-ledger, metric: pg_slow_queries_per_min, shape: ramp, magnitude: 120, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.1}
+  - metric_shift: {service: postgres-ledger, metric: pg_active_connections, shape: ramp, mode: set, magnitude: 58, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.03, when: pre_m1}
+  - metric_shift: {service: postgres-ledger, metric: pg_active_connections, shape: ramp, mode: set, magnitude: 40, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.02, when: post_m1}
+  - metric_shift: {service: ledger-svc, metric: latency_p99_ms, shape: ramp, magnitude: "{{ledger_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 3}
+  - metric_shift: {service: ledger-svc, metric: latency_p50_ms, shape: ramp, magnitude: 420, start_offset: "{{onset}}", ramp_minutes: 3}
+  - metric_shift: {service: ledger-svc, metric: db_pool_active, shape: ramp, mode: set, magnitude: "{{pool_max}}", start_offset: "{{onset + 1}}", ramp_minutes: 3, noise: 0}
+  - metric_shift: {service: ledger-svc, metric: db_pool_pending, shape: ramp, magnitude: 18, start_offset: "{{onset + 1}}", ramp_minutes: 4, noise: 0.2}
+  - metric_shift: {service: ledger-svc, metric: error_rate_5xx, shape: ramp, magnitude: 3, start_offset: "{{onset + 1}}", ramp_minutes: 3, noise: 0.2}
+  - metric_shift: {service: auth-svc, metric: latency_p99_ms, shape: ramp, magnitude: 60, start_offset: "{{onset}}", ramp_minutes: 2}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: 1400, start_offset: "{{onset}}", ramp_minutes: 3}
+
+  - log_inject: {service: "{{cache}}", level: WARN, thread: "1:X", exact: true, rate_per_min: 1, duration: 1, start_offset: "{{onset - 1}}", template: "+sdown master kestrel-cache 10.42.2.14 6379"}
+  - log_inject: {service: "{{cache}}", level: WARN, thread: "1:X", exact: true, rate_per_min: 1, duration: 1, start_offset: "{{onset - 1}}", template: "+odown master kestrel-cache 10.42.2.14 6379 #quorum 2/2"}
+  - log_inject: {service: "{{cache}}", level: WARN, thread: "1:X", exact: true, rate_per_min: 1, duration: 1, start_offset: "{{onset - 1}}", template: "+failover-triggered master kestrel-cache 10.42.2.14 6379"}
+  - log_inject: {service: "{{cache}}", level: WARN, thread: "1:X", exact: true, rate_per_min: 1, duration: 1, start_offset: "{{onset}}", template: "+selected-slave slave 10.42.5.31:6379 10.42.5.31 6379 @ kestrel-cache 10.42.2.14 6379"}
+  - log_inject: {service: "{{cache}}", level: WARN, thread: "1:X", exact: true, rate_per_min: 1, duration: 1, start_offset: "{{onset}}", template: "+switch-master kestrel-cache 10.42.2.14 6379 10.42.5.31 6379"}
+  - log_inject: {service: "{{cache}}", level: INFO, thread: "1:M", exact: true, rate_per_min: 1, duration: 1, start_offset: "{{onset}}", template: "MASTER MODE enabled (user request from 'id=9 addr=10.42.5.31:46512 laddr=10.42.5.31:6379 fd=11 name=sentinel-7a1f2c3d-cmd')"}
+  - log_inject: {service: "{{cache}}", level: INFO, thread: "1:M", exact: true, rate_per_min: 1, duration: 1, start_offset: "{{onset}}", template: "DB loaded from disk: 0.003 seconds (keys=1184, previous full sync with the old master was not complete)"}
+  - log_inject:
+      service: ledger-svc
+      level: ERROR
+      logger: io.lettuce.core.protocol.ConnectionWatchdog
+      thread: lettuce-eventExecutorLoop-1-3
+      template: "Reconnecting, last destination was {{cache}}.prod.svc.cluster.local/10.42.2.14:6379"
+      rate_per_min: 4
+      duration: 2
+      start_offset: "{{onset - 1}}"
+  - log_inject:
+      service: ledger-svc
+      level: WARN
+      logger: c.k.ledger.cache.BalanceCache
+      thread: "nio-8080-exec-{n}"
+      template: "balance cache miss for account={a}, loading from database"
+      rate_per_min: 110
+      start_offset: "{{onset}}"
+      vars: {n: {randint: [1, 200]}, a: {choice: [acc_7f31c2, acc_19ab04, acc_c2e8d1, acc_4410fe, acc_88d0a3, acc_0b7e52]}}
+  - log_inject:
+      service: postgres-ledger
+      level: INFO
+      thread: "{pid}"
+      template: "duration: {ms} ms  execute <unnamed>: SELECT balance_paise FROM account_balances WHERE account_id = $1"
+      rate_per_min: 45
+      start_offset: "{{onset}}"
+      vars: {pid: {randint: [30000, 59999]}, ms: {uniform: [700, 2300], fmt: ".3f"}}
+
+  - trace_delay: {service: ledger-svc, operation: GET /balance, add_ms: [800, 3000], share: 0.7, start_offset: "{{onset}}"}
+
+discriminators:
+  - text: the cache hit ratio collapsed to near zero at the failover
+    signal: {kind: metric, service: "{{cache}}", metric: cache_hit_ratio, op: "<", value: 0.3}
+  - text: Sentinel switched the cache primary
+    signal: {kind: log, service: "{{cache}}", contains: +switch-master, window_min: 30}
+  - text: postgres-ledger CPU spikes as misses fall through
+    signal: {kind: metric, service: postgres-ledger, metric: pg_cpu_pct, op: ">", value: 80}
+  - text: the queries hitting Postgres are simple balance lookups, not sequential scans
+    signal: {kind: log, service: postgres-ledger, contains: account_balances}
+
+relevant_evidence:
+  - [query_metrics, "{{cache}}"]
+  - [query_metrics, postgres-ledger]
+  - [query_metrics, ledger-svc]
+  - [search_logs, "{{cache}}"]
+  - [search_logs, ledger-svc]
+  - [search_logs, postgres-ledger]
+  - [get_traces, ledger-svc]
+  - [get_runbook, "{{cache}}"]
+  - [get_runbook, ledger-svc]
+
+correct_remediations:
+  - {action: cache_warmup, target: [ledger-svc, "{{cache}}"], note: "request coalescing, a cache warm-up and a temporary rate limit on GET /balance bring the hit ratio back"}
+
+ineffective_remediations:
+  - {action: add_index, target: postgres-ledger, note: "the queries are already indexed; there are just too many of them"}
+  - {action: restart, target: ledger-svc, note: "restarted pods miss the same cold cache"}
+  - {action: pool_tuning, target: [ledger-svc, pgbouncer-ledger], note: "more connections send more misses into a saturated database"}
+  - {action: restart, target: "{{cache}}", note: "restarting the cache keeps it cold"}
+
+harmful_remediations:
+  - {action: restart, target: postgres-ledger, worsen: 1.5, worsen_minutes: 10, consequence_minutes: 10, note: "restarting Postgres drops every connection and does nothing for the cold cache"}
+
+prevention: []
