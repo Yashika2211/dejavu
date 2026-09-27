@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* War-room tokens (spec 11.1). Memory is the only violet thing on screen. */
+@theme inline {
+  --color-bg: #0a0c10;
+  --color-panel: #10131a;
+  --color-border: #1d2330;
+  --color-text: #e6e9ef;
+  --color-muted: #8b93a7;
+  --color-critical: #f04438;
+  --color-warning: #f79009;
+  --color-ok: #12b76a;
+  --color-memory: #8b5cf6;
+  --color-memory-highlight: #22d3ee;
+
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-memory-highlight);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
