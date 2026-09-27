@@ -1,0 +1,59 @@
+{
+  "n": 22,
+  "incident_id": "INC-4343",
+  "date": "Wed 23 Sep 2026",
+  "alert_at": "04:51",
+  "onset_at": "04:44",
+  "oncall": "Farhan Qureshi",
+  "author": "Rohan Mehta",
+  "alert_name": "LedgerWriteErrorsHigh",
+  "alert_description": "ledger-svc error rate is 36.3% on POST /entries (threshold 10%)",
+  "root_cause_category": "disk_full_wal",
+  "culprit_service": "postgres-ledger",
+  "culprit_owner_team": "Data Platform",
+  "trigger": null,
+  "discriminators": [
+    "postgres-ledger's volume is at 100%",
+    "Postgres reports No space left on device",
+    "writes fail while reads keep working",
+    "disk usage had been climbing steadily for hours"
+  ],
+  "steps": [
+    {
+      "at": "04:56",
+      "minutes_after_alert": 5.0,
+      "action": "restart",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "no effect",
+      "note": "restarted ledger-svc; no change"
+    },
+    {
+      "at": "05:07",
+      "minutes_after_alert": 16.0,
+      "action": "wal_cleanup",
+      "target": "postgres-ledger",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Rohan dropped the inactive debezium_ledger slot and grew the volume; nobody restarted Postgres"
+    }
+  ],
+  "page": null,
+  "resolved_at": "05:19",
+  "minutes_alert_to_recovery": 28.0,
+  "mttr_min": 31.0,
+  "impact_minutes": 35.0,
+  "failed_payments": 3338,
+  "inr_at_risk": 6176087,
+  "worked": [
+    "wal_cleanup postgres-ledger"
+  ],
+  "did_not_work": [
+    "restart ledger-svc"
+  ],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": "12 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
