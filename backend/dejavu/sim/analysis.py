@@ -45,7 +45,8 @@ def sparkline(values: np.ndarray, buckets: int = 24) -> str:
     chunks = [c for c in np.array_split(values, min(buckets, len(values))) if len(c)]
     means = np.array([c.mean() for c in chunks])
     lo, hi = float(means.min()), float(means.max())
-    if hi - lo <= 0.03 * max(abs(hi), abs(lo), 1e-9):
-        return BARS[3] * len(means)
-    idx = np.round((means - lo) / (hi - lo) * (len(BARS) - 1)).astype(int)
+    # Never stretch noise to full height: the scale spans at least 25% of the level.
+    span = max(hi - lo, 0.25 * max(abs(hi), abs(lo)), 1e-9)
+    base = lo if hi - lo >= span else (lo + hi - span) / 2
+    idx = np.clip(np.round((means - base) / span * (len(BARS) - 1)), 0, len(BARS) - 1).astype(int)
     return "".join(BARS[i] for i in idx)
