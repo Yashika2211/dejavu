@@ -1,0 +1,88 @@
+{
+  "n": 17,
+  "incident_id": "INC-4307",
+  "date": "Tue 15 Sep 2026",
+  "alert_at": "11:50",
+  "onset_at": "11:42",
+  "oncall": "Priya Raman",
+  "author": "Tom\u00e1s Ortega",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 4,764 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "cpu_throttling",
+  "culprit_service": "payments-svc",
+  "culprit_owner_team": "Payments",
+  "trigger": {
+    "change_id": "chg-10fd11",
+    "type": "helm",
+    "service": "payments-svc",
+    "summary": "payments-svc values: resources.limits.cpu 2000m -> 500m",
+    "author": "Deepak Rao",
+    "at": "11:40",
+    "details": {
+      "key": "resources.limits.cpu",
+      "from": "2000m",
+      "to": "500m",
+      "diff": "right-size CPU limits to p95 usage for cost savings (FINOPS-232)"
+    }
+  },
+  "discriminators": [
+    "payments-svc CPU throttle ratio above 0.4",
+    "payments-svc CPU usage pinned at its (new) limit",
+    "a Helm values change on payments-svc just before the onset",
+    "slow spans are payments-svc's own work, not acquirerx"
+  ],
+  "steps": [
+    {
+      "at": "11:56",
+      "minutes_after_alert": 6.0,
+      "action": "restart",
+      "target": "payments-svc",
+      "params": {},
+      "outcome": "no effect",
+      "note": "restarted payments-svc; no change"
+    },
+    {
+      "at": "12:02",
+      "minutes_after_alert": 12.0,
+      "action": "scale_out",
+      "target": "payments-svc",
+      "params": {
+        "replicas": "8"
+      },
+      "outcome": "partial relief only",
+      "note": "scaled payments-svc 4 -> 8; partial relief"
+    },
+    {
+      "at": "12:10",
+      "minutes_after_alert": 20.0,
+      "action": "limits_revert",
+      "target": "payments-svc",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "noticed cpu_throttle_ratio and reverted the Helm CPU limit to 2000m"
+    }
+  ],
+  "page": null,
+  "resolved_at": "12:18",
+  "minutes_alert_to_recovery": 28.0,
+  "mttr_min": 31.0,
+  "impact_minutes": 36.0,
+  "failed_payments": 4681,
+  "inr_at_risk": 8659525,
+  "worked": [
+    "limits_revert payments-svc"
+  ],
+  "did_not_work": [
+    "restart payments-svc",
+    "scale_out payments-svc"
+  ],
+  "made_worse": [],
+  "prevention": [
+    "owner_review",
+    "load_test",
+    "canary_rollout"
+  ],
+  "migration_context": "11 days after the PgBouncer migration (M1, 3 Sep); 4 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
