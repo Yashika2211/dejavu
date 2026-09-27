@@ -10,7 +10,7 @@ incidents:
   - {n: 3, at: "2026-08-20T21:37", archetype: cert_expiry}
   - {n: 4, at: "2026-08-22T10:15", archetype: memory_leak_oom, overrides: {model_version: 47, prev_model_version: 46}}
   - {n: 5, at: "2026-08-24T19:42", archetype: db_pool_exhaustion, overrides: {version: "3.15.1", prev_version: "3.15.0"}, tests: first recurrence}
-  - {n: 6, at: "2026-08-25T12:20", archetype: retry_storm, tests: flag flip with no deploy}
+  - {n: 6, at: "2026-08-25T12:20", archetype: retry_storm, overrides: {flag_author: Priya Raman}, tests: flag flip with no deploy}
   - {n: 7, at: "2026-08-27T11:42", archetype: missing_index_slow_query, tests: look-alike of 1 and 5}
   - {n: 8, at: "2026-08-29T20:05", archetype: kafka_rebalance_storm, tests: looks like an auth problem}
   - {n: 9, at: "2026-08-31T13:30", archetype: psp_rate_limit, tests: recurrence}
@@ -24,7 +24,7 @@ incidents:
   - {n: 17, at: "2026-09-15T11:50", archetype: cpu_throttling}
   - {n: 18, at: "2026-09-16T12:35", archetype: missing_index_slow_query, tests: negative memory (do not raise the pool)}
   - {n: 19, at: "2026-09-18T08:05", archetype: sms_quota_exhausted, tests: novel; no negative transfer}
-  - {n: 20, at: "2026-09-19T20:30", archetype: retry_storm, foresight_checkpoint: true, tests: foresight on the flag flip}
+  - {n: 20, at: "2026-09-19T20:30", archetype: retry_storm, overrides: {flag_author: Tomás Ortega}, foresight_checkpoint: true, tests: foresight on the flag flip}
   - {n: 21, at: "2026-09-21T11:20", archetype: db_pool_exhaustion, overrides: {version: "3.19.0", prev_version: "3.18.2"}, foresight_checkpoint: true, tests: foresight on the deploy}
   - {n: 22, at: "2026-09-23T04:51", archetype: disk_full_wal, tests: first occurrence; Day-0 memory says never restart postgres on a full disk}
   - {n: 23, at: "2026-09-24T22:40", archetype: clock_skew_jwt, tests: recurrence}
