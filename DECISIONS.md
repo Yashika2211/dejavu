@@ -13,3 +13,4 @@ One line each: decision, then why.
 - PDFs for `retain_files` are generated with fpdf2 (pure Python, tiny) instead of committing binary fixtures.
 - Kept Next.js 16's generated `web/AGENTS.md`. It points agents at the bundled docs for this Next version, and `next dev` re-creates it anyway.
 - `.github/workflows/ci.yml` exists locally but isn't pushed: the GitHub token lacks the `workflow` scope. It gets pushed after `gh auth refresh -s workflow`.
+- Phase 1 started before the Phase 0 live spike passed. The owner said "go" with no keys configured; the simulator needs no keys, and the spike runs as soon as `.env` has them.
