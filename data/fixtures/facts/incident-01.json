@@ -1,0 +1,84 @@
+{
+  "n": 1,
+  "incident_id": "INC-4127",
+  "date": "Mon 17 Aug 2026",
+  "alert_at": "03:07",
+  "onset_at": "02:58",
+  "oncall": "Priya Raman",
+  "author": "Farhan Qureshi",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 6,672 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "db_pool_exhaustion",
+  "culprit_service": "ledger-svc",
+  "culprit_owner_team": "Core Ledger",
+  "trigger": {
+    "change_id": "chg-c3e375",
+    "type": "deploy",
+    "service": "ledger-svc",
+    "summary": "ledger-svc 3.13.2 -> 3.14.0",
+    "author": "Ananya Iyer",
+    "at": "02:54",
+    "details": {
+      "version": "3.14.0",
+      "prev_version": "3.13.2",
+      "pr": 2218,
+      "pr_title": "Enrich ledger postings with account tier",
+      "diff": "LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block",
+      "files": [
+        "LedgerPostingService.java",
+        "AccountTierClient.java",
+        "LedgerPostingServiceTest.java"
+      ],
+      "lines": "+46 -9"
+    }
+  },
+  "discriminators": [
+    "db_pool_pending stays above zero while db_pool_active is pinned at the pool maximum",
+    "db_pool_active is pinned at the pool maximum",
+    "postgres-ledger CPU stays normal, so the database itself is not the bottleneck",
+    "slow spans wait in HikariPool.getConnection",
+    "a ledger-svc deploy shortly before the onset"
+  ],
+  "steps": [
+    {
+      "at": "03:13",
+      "minutes_after_alert": 6.0,
+      "action": "restart",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "brief relief, then relapse",
+      "note": "restarted ledger-svc pods; latency dropped for a few minutes and came back"
+    },
+    {
+      "at": "03:21",
+      "minutes_after_alert": 14.0,
+      "action": "rollback",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Farhan joined and rolled back the deploy from 02:54"
+    }
+  ],
+  "page": null,
+  "resolved_at": "03:31",
+  "minutes_alert_to_recovery": 24.0,
+  "mttr_min": 27.0,
+  "impact_minutes": 33.0,
+  "failed_payments": 1539,
+  "inr_at_risk": 2847379,
+  "worked": [
+    "rollback ledger-svc"
+  ],
+  "did_not_work": [
+    "restart ledger-svc"
+  ],
+  "made_worse": [],
+  "prevention": [
+    "canary_rollout",
+    "load_test",
+    "pool_config_review"
+  ],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
