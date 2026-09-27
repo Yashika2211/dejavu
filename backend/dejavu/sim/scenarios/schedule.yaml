@@ -1,0 +1,49 @@
+# The Gauntlet (spec 7.1): 24 incidents over six simulated weeks, times in IST.
+# Day-0 history (Marcus's postmortems, runbooks, RFCs) is imported before incident 1.
+# M1 (PgBouncer) lands on 3 Sep, M2 (Redis -> Valkey) on 10 Sep; see dejavu/sim/migrations.py.
+seed: 42
+first_incident_number: 4127
+
+incidents:
+  - {n: 1, at: "2026-08-17T03:07", archetype: db_pool_exhaustion, overrides: {version: "3.14.0", prev_version: "3.13.2"}, tests: first occurrence}
+  - {n: 2, at: "2026-08-19T14:03", archetype: psp_rate_limit, tests: status page lags reality}
+  - {n: 3, at: "2026-08-20T21:37", archetype: cert_expiry}
+  - {n: 4, at: "2026-08-22T10:15", archetype: memory_leak_oom, overrides: {model_version: 47, prev_model_version: 46}}
+  - {n: 5, at: "2026-08-24T19:42", archetype: db_pool_exhaustion, overrides: {version: "3.15.1", prev_version: "3.15.0"}, tests: first recurrence}
+  - {n: 6, at: "2026-08-25T12:20", archetype: retry_storm, tests: flag flip with no deploy}
+  - {n: 7, at: "2026-08-27T11:42", archetype: missing_index_slow_query, tests: look-alike of 1 and 5}
+  - {n: 8, at: "2026-08-29T20:05", archetype: kafka_rebalance_storm, tests: looks like an auth problem}
+  - {n: 9, at: "2026-08-31T13:30", archetype: psp_rate_limit, tests: recurrence}
+  - {n: 10, at: "2026-09-01T22:10", archetype: clock_skew_jwt, tests: look-alike of 3}
+  - {n: 11, at: "2026-09-04T02:14", archetype: cache_stampede, tests: first cache failover (Redis Sentinel)}
+  - {n: 12, at: "2026-09-06T18:55", archetype: db_pool_exhaustion, tests: temporal validity after the PgBouncer migration}
+  - {n: 13, at: "2026-09-08T09:12", archetype: dns_resolution_failure}
+  - {n: 14, at: "2026-09-11T01:40", archetype: cache_stampede, tests: stale runbook commands after the Valkey migration}
+  - {n: 15, at: "2026-09-12T16:25", archetype: memory_leak_oom, overrides: {model_version: 52, prev_model_version: 51}, tests: recurrence}
+  - {n: 16, at: "2026-09-13T21:05", archetype: cert_expiry, extras: [prompt_injection, leaked_token], tests: prompt injection and a leaked token in logs}
+  - {n: 17, at: "2026-09-15T11:50", archetype: cpu_throttling}
+  - {n: 18, at: "2026-09-16T12:35", archetype: missing_index_slow_query, tests: negative memory (do not raise the pool)}
+  - {n: 19, at: "2026-09-18T08:05", archetype: sms_quota_exhausted, tests: novel; no negative transfer}
+  - {n: 20, at: "2026-09-19T20:30", archetype: retry_storm, foresight_checkpoint: true, tests: foresight on the flag flip}
+  - {n: 21, at: "2026-09-21T11:20", archetype: db_pool_exhaustion, overrides: {version: "3.19.0", prev_version: "3.18.2"}, foresight_checkpoint: true, tests: foresight on the deploy}
+  - {n: 22, at: "2026-09-23T04:51", archetype: disk_full_wal, tests: first occurrence; Day-0 memory says never restart postgres on a full disk}
+  - {n: 23, at: "2026-09-24T22:40", archetype: clock_skew_jwt, tests: recurrence}
+  - {n: 24, at: "2026-09-26T15:10", archetype: az_network_partition, tests: novel; no negative transfer}
+
+# Day 1 vs Day 42 (spec 7.2): fresh seeds, never seen during the Gauntlet.
+held_out:
+  seed: 1729
+  first_incident_number: 4382
+  incidents:
+    - {n: 101, at: "2026-09-28T10:40", archetype: db_pool_exhaustion, tests: recurring}
+    - {n: 102, at: "2026-09-29T19:15", archetype: psp_rate_limit, tests: recurring}
+    - {n: 103, at: "2026-09-30T21:20", archetype: cert_expiry, tests: recurring}
+    - {n: 104, at: "2026-10-01T13:05", archetype: memory_leak_oom, tests: recurring}
+    - {n: 105, at: "2026-10-02T11:55", archetype: missing_index_slow_query, tests: look-alike}
+    - {n: 106, at: "2026-10-03T16:30", archetype: jwks_rotation_mismatch, tests: novel}
+
+# Fresh-seed variants for the live demo (spec 12).
+demos:
+  - {name: race-pool-after-pgbouncer, at: "2026-09-27T03:07", archetype: db_pool_exhaustion, seed: 2027}
+  - {name: lookalike-psp, at: "2026-09-27T20:40", archetype: psp_rate_limit, seed: 2028}
+  - {name: novel-jwks, at: "2026-09-27T14:00", archetype: jwks_rotation_mismatch, seed: 2029}
