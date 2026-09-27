@@ -1,0 +1,59 @@
+{
+  "n": 11,
+  "incident_id": "INC-4230",
+  "date": "Fri 04 Sep 2026",
+  "alert_at": "02:14",
+  "onset_at": "02:09",
+  "oncall": "Meera Pillai",
+  "author": "Sara Kim",
+  "alert_name": "LedgerLatencyP99High",
+  "alert_description": "ledger-svc p99 latency is 3,150 ms (threshold 1,000 ms)",
+  "root_cause_category": "cache_stampede",
+  "culprit_service": "redis-cache",
+  "culprit_owner_team": "Platform",
+  "trigger": null,
+  "discriminators": [
+    "the cache hit ratio collapsed to near zero at the failover",
+    "Sentinel switched the cache primary",
+    "postgres-ledger CPU spikes as misses fall through",
+    "the queries hitting Postgres are simple balance lookups, not sequential scans"
+  ],
+  "steps": [
+    {
+      "at": "02:20",
+      "minutes_after_alert": 6.0,
+      "action": "restart",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "no effect",
+      "note": "restarted ledger-svc; no change"
+    },
+    {
+      "at": "02:26",
+      "minutes_after_alert": 12.0,
+      "action": "cache_warmup",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Sara enabled request coalescing and warmed the balance cache"
+    }
+  ],
+  "page": null,
+  "resolved_at": "02:33",
+  "minutes_alert_to_recovery": 19.0,
+  "mttr_min": 22.0,
+  "impact_minutes": 24.0,
+  "failed_payments": 452,
+  "inr_at_risk": 835521,
+  "worked": [
+    "cache_warmup ledger-svc"
+  ],
+  "did_not_work": [
+    "restart ledger-svc"
+  ],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": "0 days after the PgBouncer migration (M1, 3 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
