@@ -88,7 +88,7 @@ discriminators:
   - text: auth-svc rejects the handshake with x509 certificate has expired
     signal: {kind: log, service: auth-svc, contains: certificate has expired}
   - text: requests stop reaching auth-svc (its traffic drops rather than its errors rising)
-    signal: {kind: metric, service: auth-svc, metric: rps, op: "<", value: 0.75, relative: true}
+    signal: {kind: metric, service: auth-svc, metric: rps, op: "<", value: 0.7, relative: true, window_min: 20}
   - text: cert-manager has been failing to renew for a while
     signal: {kind: log, service: edge-gateway, contains: kestrel-ca-issuer, window_min: 180}
 
