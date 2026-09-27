@@ -1,0 +1,61 @@
+{
+  "n": 2,
+  "incident_id": "INC-4133",
+  "date": "Wed 19 Aug 2026",
+  "alert_at": "14:03",
+  "onset_at": "13:51",
+  "oncall": "Priya Raman",
+  "author": "Priya Raman",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 5,382 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "psp_rate_limit",
+  "culprit_service": "acquirerx",
+  "culprit_owner_team": null,
+  "trigger": null,
+  "discriminators": [
+    "acquirerx HTTP 429 rate far above its normal level",
+    "payments-svc logs rate_limit_exceeded from acquirerx",
+    "internal services are healthy (ledger pool not waiting)",
+    "postgres-ledger CPU is normal"
+  ],
+  "steps": [
+    {
+      "at": "14:12",
+      "minutes_after_alert": 9.0,
+      "action": "rollback",
+      "target": "checkout-api",
+      "params": {},
+      "outcome": "no effect",
+      "note": "rolled back the checkout-api copy-change deploy from 13:29; no change"
+    },
+    {
+      "at": "14:22",
+      "minutes_after_alert": 19.0,
+      "action": "psp_failover",
+      "target": "payments-svc",
+      "params": {
+        "to": "paynova"
+      },
+      "outcome": "fixed it",
+      "note": "failed routing over to paynova after spotting rate_limit_exceeded in payments-svc logs"
+    }
+  ],
+  "page": null,
+  "resolved_at": "14:28",
+  "minutes_alert_to_recovery": 25.0,
+  "mttr_min": 28.0,
+  "impact_minutes": 37.0,
+  "failed_payments": 9016,
+  "inr_at_risk": 16679818,
+  "worked": [
+    "psp_failover payments-svc"
+  ],
+  "did_not_work": [
+    "rollback checkout-api"
+  ],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
