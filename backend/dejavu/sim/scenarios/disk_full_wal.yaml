@@ -1,0 +1,119 @@
+# A logical replication slot left behind by a decommissioned CDC connector (debezium_ledger) has
+# been holding WAL for weeks. Tonight the volume hit 100%: every write fails, reads still work.
+# Restarting Postgres on a full disk puts it into crash recovery and extends the outage by ~40
+# minutes (Marcus's February postmortem says so).
+id: disk_full_wal
+title: WAL retained by a stale replication slot fills the disk
+symptom_class: write_failures
+look_alike_group: C
+culprit_service: postgres-ledger
+trigger: time
+
+variants:
+  onset: {randint: [-8, -5]}
+  disk_start: {uniform: [90.5, 93.0]}
+  write_errors: {uniform: [36, 46]}
+  failure_share: {uniform: [0.55, 0.7]}
+
+alert:
+  name: LedgerWriteErrorsHigh
+  service: ledger-svc
+  summary: ledger-svc 5xx error rate above 10% for 5 minutes
+  description: "ledger-svc error rate is {value} on POST /entries (threshold 10%)"
+  metric_service: ledger-svc
+  metric: error_rate_5xx
+  threshold: 10
+  expr: 'sum(rate(http_server_requests_seconds_count{service="ledger-svc",uri="/entries",status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count{service="ledger-svc",uri="/entries"}[5m])) > 0.1'
+  runbook: ledger-write-errors
+  labels: {team: core-ledger}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 2
+
+effects:
+  - metric_shift: {service: postgres-ledger, metric: disk_used_pct, shape: linear, mode: set, magnitude: "{{disk_start}}", to: 100, start_offset: -180, duration: "{{onset + 180}}", noise: 0}
+  - metric_shift: {service: postgres-ledger, metric: disk_used_pct, shape: step, mode: set, magnitude: 100, start_offset: "{{onset}}", noise: 0}
+  - metric_shift: {service: ledger-svc, metric: error_rate_5xx, shape: ramp, magnitude: "{{write_errors}}", start_offset: "{{onset}}", ramp_minutes: 2, noise: 0.05}
+  - metric_shift: {service: checkout-api, metric: error_rate_5xx, shape: ramp, magnitude: 20, start_offset: "{{onset}}", ramp_minutes: 2, noise: 0.08}
+  - metric_shift: {service: ledger-svc, metric: latency_p99_ms, shape: ramp, magnitude: 300, start_offset: "{{onset}}", ramp_minutes: 2}
+
+  - log_inject:
+      service: postgres-ledger
+      level: ERROR
+      thread: "{pid}"
+      template: 'could not extend file "base/16384/{rel}": No space left on device'
+      rate_per_min: 30
+      start_offset: "{{onset}}"
+      vars: {pid: {randint: [30000, 59999]}, rel: {choice: ["2619", "18544", "18561", "18580"]}}
+  - log_inject:
+      service: postgres-ledger
+      level: FATAL
+      thread: "1"
+      fields: {label: PANIC}
+      template: 'could not write to file "pg_wal/xlogtemp.{n}": No space left on device'
+      rate_per_min: 0.4
+      start_offset: "{{onset}}"
+      vars: {n: {randint: [1100, 1199]}}
+  - log_inject:
+      service: postgres-ledger
+      level: WARN
+      thread: "68"
+      template: "checkpoints are occurring too frequently ({s} seconds apart)"
+      rate_per_min: 0.5
+      start_offset: -60
+      vars: {s: {randint: [18, 28]}}
+  - log_inject:
+      service: ledger-svc
+      level: ERROR
+      logger: o.h.engine.jdbc.spi.SqlExceptionHelper
+      thread: "nio-8080-exec-{n}"
+      template: 'ERROR: could not extend file "base/16384/18544": No space left on device'
+      rate_per_min: 30
+      start_offset: "{{onset}}"
+      vars: {n: {randint: [1, 200]}}
+  - log_inject:
+      service: ledger-svc
+      level: WARN
+      logger: c.k.ledger.api.PostingController
+      thread: "nio-8080-exec-{n}"
+      template: "POST /entries failed: org.springframework.dao.DataAccessResourceFailureException: could not execute statement (account={a})"
+      rate_per_min: 20
+      start_offset: "{{onset}}"
+      vars: {n: {randint: [1, 200]}, a: {choice: [acc_7f31c2, acc_19ab04, acc_c2e8d1, acc_4410fe, acc_88d0a3]}}
+
+  - trace_delay: {service: ledger-svc, operation: JDBC executeUpdate, add_ms: [5, 30], share: 1.0, start_offset: "{{onset}}", error_share: 0.9, error: 'ERROR: could not extend file: No space left on device'}
+
+discriminators:
+  - text: postgres-ledger's volume is at 100%
+    signal: {kind: metric, service: postgres-ledger, metric: disk_used_pct, op: ">", value: 99.5}
+  - text: Postgres reports No space left on device
+    signal: {kind: log, service: postgres-ledger, contains: No space left on device}
+  - text: writes fail while reads keep working
+    signal: {kind: log, service: ledger-svc, contains: "GET /balance"}
+  - text: disk usage had been climbing steadily for hours
+    signal: {kind: metric, service: postgres-ledger, metric: disk_used_pct, stat: min, op: "<", value: 96, window_min: 180}
+
+relevant_evidence:
+  - [query_metrics, postgres-ledger]
+  - [query_metrics, ledger-svc]
+  - [query_metrics, checkout-api]
+  - [search_logs, postgres-ledger]
+  - [search_logs, ledger-svc]
+  - [get_traces, ledger-svc]
+  - [get_runbook, postgres-ledger]
+
+correct_remediations:
+  - {action: wal_cleanup, target: postgres-ledger, note: "dropping the inactive debezium_ledger slot releases the retained WAL; expanding the volume adds headroom (DBA approval)"}
+
+ineffective_remediations:
+  - {action: rollback, target: ledger-svc, note: "no ledger-svc change caused this"}
+  - {action: restart, target: ledger-svc, note: "application restarts do not free disk"}
+  - {action: scale_out, target: ledger-svc, note: "more pods, same full disk"}
+  - {action: pool_tuning, target: [ledger-svc, pgbouncer-ledger], note: "connections are not the problem"}
+
+harmful_remediations:
+  - {action: restart, target: postgres-ledger, worsen: 1.25, worsen_minutes: 40, consequence_minutes: 40, note: "Postgres cannot finish crash recovery on a full disk; about 40 extra minutes of outage"}
+
+prevention: []
