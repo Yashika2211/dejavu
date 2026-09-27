@@ -1,0 +1,59 @@
+{
+  "n": 14,
+  "incident_id": "INC-4275",
+  "date": "Fri 11 Sep 2026",
+  "alert_at": "01:40",
+  "onset_at": "01:31",
+  "oncall": "Deepak Rao",
+  "author": "Deepak Rao",
+  "alert_name": "LedgerLatencyP99High",
+  "alert_description": "ledger-svc p99 latency is 3,967 ms (threshold 1,000 ms)",
+  "root_cause_category": "cache_stampede",
+  "culprit_service": "valkey-cache",
+  "culprit_owner_team": "Platform",
+  "trigger": null,
+  "discriminators": [
+    "the cache hit ratio collapsed to near zero at the failover",
+    "Sentinel switched the cache primary",
+    "postgres-ledger CPU spikes as misses fall through",
+    "the queries hitting Postgres are simple balance lookups, not sequential scans"
+  ],
+  "steps": [
+    {
+      "at": "01:47",
+      "minutes_after_alert": 7.0,
+      "action": "cache_warmup",
+      "target": "redis-cache",
+      "params": {},
+      "outcome": "target does not exist",
+      "note": "followed RB-cache-failover; redis-cache no longer exists after the Valkey migration"
+    },
+    {
+      "at": "01:49",
+      "minutes_after_alert": 9.0,
+      "action": "cache_warmup",
+      "target": "valkey-cache",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "warmed the cache on valkey-cache instead"
+    }
+  ],
+  "page": null,
+  "resolved_at": "01:56",
+  "minutes_alert_to_recovery": 16.0,
+  "mttr_min": 19.0,
+  "impact_minutes": 25.0,
+  "failed_payments": 379,
+  "inr_at_risk": 701553,
+  "worked": [
+    "cache_warmup valkey-cache"
+  ],
+  "did_not_work": [
+    "cache_warmup redis-cache"
+  ],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": "7 days after the PgBouncer migration (M1, 3 Sep); 0 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
