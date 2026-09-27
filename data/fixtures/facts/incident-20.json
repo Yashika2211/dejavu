@@ -1,0 +1,68 @@
+{
+  "n": 20,
+  "incident_id": "INC-4320",
+  "date": "Sat 19 Sep 2026",
+  "alert_at": "20:30",
+  "onset_at": "20:23",
+  "oncall": "Priya Raman",
+  "author": "Priya Raman",
+  "alert_name": "PaymentsErrorRateHigh",
+  "alert_description": "payments-svc 5xx error rate is 21.0% (threshold 5%)",
+  "root_cause_category": "retry_storm",
+  "culprit_service": "checkout-api",
+  "culprit_owner_team": "Payments",
+  "trigger": {
+    "change_id": "chg-6394ce",
+    "type": "flag",
+    "service": "checkout-api",
+    "summary": "flag checkout.retry_policy standard -> aggressive",
+    "author": "Tom\u00e1s Ortega",
+    "at": "20:20",
+    "details": {
+      "flag": "checkout.retry_policy",
+      "from": "standard",
+      "to": "aggressive",
+      "diff": "EXP-338: retry UPI collect calls more eagerly (maxAttempts 2 -> 6, backoff 400 ms -> 50 ms)"
+    }
+  },
+  "discriminators": [
+    "payments-svc request rate is several times its baseline",
+    "user traffic at the edge is flat",
+    "checkout-api logs show retries and an open circuit breaker",
+    "a feature flag flipped on checkout-api minutes before the onset"
+  ],
+  "steps": [
+    {
+      "at": "20:35",
+      "minutes_after_alert": 5.0,
+      "action": "flag_revert",
+      "target": "checkout-api",
+      "params": {
+        "flag": "checkout.retry_policy",
+        "value": "standard"
+      },
+      "outcome": "fixed it",
+      "note": "recognised the INC-4178 pattern and reverted the flag"
+    }
+  ],
+  "page": null,
+  "resolved_at": "20:40",
+  "minutes_alert_to_recovery": 10.0,
+  "mttr_min": 13.0,
+  "impact_minutes": 17.0,
+  "failed_payments": 6962,
+  "inr_at_risk": 12878909,
+  "worked": [
+    "flag_revert checkout-api"
+  ],
+  "did_not_work": [],
+  "made_worse": [],
+  "prevention": [
+    "flag_guard",
+    "canary_rollout",
+    "load_test"
+  ],
+  "migration_context": "9 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
