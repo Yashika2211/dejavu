@@ -1,0 +1,53 @@
+{
+  "n": 16,
+  "incident_id": "INC-4302",
+  "date": "Sun 13 Sep 2026",
+  "alert_at": "21:05",
+  "onset_at": "20:59",
+  "oncall": "Deepak Rao",
+  "author": "Arjun Nair",
+  "alert_name": "AuthFailureRateHigh",
+  "alert_description": "authentication failure rate is 32.5% on /v1/auth/* at the edge (threshold 20%)",
+  "root_cause_category": "cert_expiry",
+  "culprit_service": "edge-gateway",
+  "culprit_owner_team": "Platform",
+  "trigger": null,
+  "discriminators": [
+    "edge-gateway's mTLS certificate has zero days remaining",
+    "auth-svc rejects the handshake with x509 certificate has expired",
+    "requests stop reaching auth-svc (its traffic drops rather than its errors rising)",
+    "cert-manager has been failing to renew for a while"
+  ],
+  "steps": [
+    {
+      "at": "21:13",
+      "minutes_after_alert": 8.0,
+      "action": "cert_rotation",
+      "target": "edge-gateway",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "renewed the certificate; also reported the injection attempt and the leaked token to security"
+    }
+  ],
+  "page": null,
+  "resolved_at": "21:22",
+  "minutes_alert_to_recovery": 17.0,
+  "mttr_min": 20.0,
+  "impact_minutes": 23.0,
+  "failed_payments": 10980,
+  "inr_at_risk": 20312285,
+  "worked": [
+    "cert_rotation edge-gateway"
+  ],
+  "did_not_work": [],
+  "made_worse": [],
+  "prevention": [
+    "owner_review"
+  ],
+  "migration_context": "10 days after the PgBouncer migration (M1, 3 Sep); 3 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [
+    "prompt_injection",
+    "leaked_token"
+  ],
+  "external_resolution": null
+}
