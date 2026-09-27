@@ -1,0 +1,95 @@
+# Novel: the smsbridge account hit its monthly SMS quota. Every OTP send is rejected with HTTP
+# 402, so step-up authentication fails. It looks like the Kafka rebalance storm (same alert,
+# OTPs involved), but consumer lag is normal: the messages are consumed fine and then refused.
+# There is no fix we can apply ourselves; escalate to Messaging for the vendor.
+id: sms_quota_exhausted
+title: SMS provider quota exhausted
+category: novel
+symptom_class: auth_failures
+look_alike_group: B
+culprit_service: smsbridge
+culprit_aliases: [notifications-worker]
+trigger: external
+
+variants:
+  onset: {randint: [-9, -6]}
+  auth_4xx: {uniform: [13, 16]}
+  failure_share: {uniform: [0.1, 0.14]}
+
+alert:
+  name: AuthFailureRateHigh
+  service: auth-svc
+  summary: authentication failure rate above 12% for 5 minutes
+  description: "authentication failure rate is {value} on auth-svc (threshold 12%)"
+  metric_service: auth-svc
+  metric: error_rate_4xx
+  threshold: 12
+  expr: 'sum(rate(http_server_requests_total{service="auth-svc",code="401"}[5m])) / sum(rate(http_server_requests_total{service="auth-svc"}[5m])) > 0.12'
+  runbook: auth-failures
+  labels: {team: identity}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 4
+
+effects:
+  - metric_shift: {service: smsbridge, metric: error_rate_4xx, shape: ramp, mode: set, magnitude: 100, start_offset: "{{onset - 2}}", ramp_minutes: 1, noise: 0}
+  - metric_shift: {service: smsbridge, metric: latency_p99_ms, shape: ramp, mode: multiply, magnitude: 0.2, start_offset: "{{onset - 2}}", ramp_minutes: 1}
+  - metric_shift: {service: notifications-worker, metric: error_rate_5xx, shape: ramp, magnitude: 45, start_offset: "{{onset - 2}}", ramp_minutes: 1, noise: 0.05}
+  - metric_shift: {service: auth-svc, metric: error_rate_4xx, shape: ramp, magnitude: "{{auth_4xx}}", start_offset: "{{onset}}", ramp_minutes: 4, noise: 0.06}
+
+  - log_inject:
+      service: notifications-worker
+      level: ERROR
+      logger: c.k.notify.sms.SmsBridgeClient
+      thread: ntainer#0-0-C-1
+      template: 'smsbridge send failed: HTTP 402 {"error":"quota_exceeded","message":"Monthly SMS quota exhausted for account KSTL-PROD. Contact your account manager to raise the limit."} (msgId={m})'
+      rate_per_min: 45
+      start_offset: "{{onset - 2}}"
+      vars: {m: {hex: 12}}
+  - log_inject:
+      service: notifications-worker
+      level: WARN
+      logger: c.k.notify.otp.OtpConsumer
+      thread: ntainer#0-0-C-1
+      template: "OTP {m} dead-lettered to otp-requests.dlq after 3 attempts"
+      rate_per_min: 14
+      start_offset: "{{onset - 1}}"
+      vars: {m: {hex: 12}}
+  - log_inject:
+      service: auth-svc
+      level: WARN
+      caller: otp/verify.go:71
+      template: otp verification failed
+      fields: {reason: otp_expired, user_id: "u_{u}", channel: sms}
+      rate_per_min: 25
+      start_offset: "{{onset}}"
+      ramp_minutes: 4
+      vars: {u: {hex: 8}}
+
+discriminators:
+  - text: every smsbridge request is rejected with a 4xx
+    signal: {kind: metric, service: smsbridge, metric: error_rate_4xx, op: ">", value: 50}
+  - text: smsbridge says the account quota is exhausted
+    signal: {kind: log, service: notifications-worker, contains: quota_exceeded}
+  - text: consumer lag is normal (this is not a rebalance storm)
+    signal: {kind: metric, service: notifications-worker, metric: kafka_consumer_lag, op: "<", value: 2000}
+
+relevant_evidence:
+  - [query_metrics, smsbridge]
+  - [query_metrics, notifications-worker]
+  - [query_metrics, auth-svc]
+  - [search_logs, notifications-worker]
+  - [search_logs, auth-svc]
+  - [check_dependency, smsbridge]
+
+correct_remediations: []
+
+ineffective_remediations:
+  - {action: rollback, target: notifications-worker, note: "nothing changed in notifications-worker"}
+  - {action: restart, target: [notifications-worker, auth-svc], note: "restarts do not restore the quota"}
+  - {action: scale_out, target: notifications-worker, note: "more consumers get the same 402"}
+  - {action: config_tuning, target: notifications-worker, note: "consumer settings are not the problem"}
+
+prevention: [owner_review]
