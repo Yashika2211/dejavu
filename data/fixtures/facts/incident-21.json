@@ -1,0 +1,73 @@
+{
+  "n": 21,
+  "incident_id": "INC-4327",
+  "date": "Mon 21 Sep 2026",
+  "alert_at": "11:20",
+  "onset_at": "11:11",
+  "oncall": "Farhan Qureshi",
+  "author": "Ananya Iyer",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 7,146 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "db_pool_exhaustion",
+  "culprit_service": "ledger-svc",
+  "culprit_owner_team": "Core Ledger",
+  "trigger": {
+    "change_id": "chg-e3d988",
+    "type": "deploy",
+    "service": "ledger-svc",
+    "summary": "ledger-svc 3.18.2 -> 3.19.0",
+    "author": "Ananya Iyer",
+    "at": "11:07",
+    "details": {
+      "version": "3.19.0",
+      "prev_version": "3.18.2",
+      "pr": 2254,
+      "pr_title": "Enrich ledger postings with account tier",
+      "diff": "LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block",
+      "files": [
+        "LedgerPostingService.java",
+        "AccountTierClient.java",
+        "LedgerPostingServiceTest.java"
+      ],
+      "lines": "+46 -9"
+    }
+  },
+  "discriminators": [
+    "db_pool_active is pinned at the pool maximum",
+    "postgres-ledger CPU stays normal, so the database itself is not the bottleneck",
+    "clients queue in PgBouncer (pgbouncer_cl_waiting climbs)",
+    "PgBouncer logs query_wait_timeout",
+    "a ledger-svc deploy shortly before the onset"
+  ],
+  "steps": [
+    {
+      "at": "11:26",
+      "minutes_after_alert": 6.0,
+      "action": "rollback",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "rolled back 3.19.0; pgbouncer_cl_waiting drained"
+    }
+  ],
+  "page": null,
+  "resolved_at": "11:36",
+  "minutes_alert_to_recovery": 16.0,
+  "mttr_min": 19.0,
+  "impact_minutes": 25.0,
+  "failed_payments": 9481,
+  "inr_at_risk": 17540676,
+  "worked": [
+    "rollback ledger-svc"
+  ],
+  "did_not_work": [],
+  "made_worse": [],
+  "prevention": [
+    "canary_rollout",
+    "load_test",
+    "pool_config_review"
+  ],
+  "migration_context": "10 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
