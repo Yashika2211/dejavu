@@ -1,0 +1,153 @@
+# What the humans at Kestrel Pay actually did in each Gauntlet incident (the canonical account
+# their postmortems describe). Steps are minutes after the alert. `scripts/generate_fixtures.py`
+# replays them in the simulator to compute resolution times and rupees at risk, so every number
+# in the human-voice fixtures comes from the simulation.
+#
+# On-call rotation (Mon-Sun): 17 Aug Priya Raman, 24 Aug Tomás Ortega, 31 Aug Meera Pillai,
+# 7 Sep Deepak Rao, 14 Sep Priya Raman, 21 Sep Farhan Qureshi.
+
+- n: 1
+  oncall: Priya Raman
+  author: Farhan Qureshi
+  steps:
+    - {at: 6, action: restart, target: ledger-svc, note: restarted ledger-svc pods; latency dropped for a few minutes and came back}
+    - {at: 14, action: rollback, target: ledger-svc, note: Farhan joined and rolled back the deploy from 02:54}
+- n: 2
+  oncall: Priya Raman
+  author: Priya Raman
+  steps:
+    - {at: 9, action: rollback, target: checkout-api, note: rolled back the checkout-api copy-change deploy from 13:29; no change}
+    - {at: 19, action: psp_failover, target: payments-svc, params: {to: paynova}, note: failed routing over to paynova after spotting rate_limit_exceeded in payments-svc logs}
+- n: 3
+  oncall: Priya Raman
+  author: Arjun Nair
+  steps:
+    - {at: 6, action: restart, target: auth-svc, note: restarted auth-svc; no change}
+    - {at: 13, action: cert_rotation, target: edge-gateway, note: Arjun renewed the edge-gateway-mtls certificate and fixed the issuer reference}
+- n: 4
+  oncall: Priya Raman
+  author: Ishita Bose
+  steps:
+    - {at: 5, action: restart, target: fraud-scorer, note: restarted fraud-scorer; OOMs resumed about ten minutes later}
+    - {at: 18, action: scale_out, target: fraud-scorer, params: {replicas: "6"}, note: scaled fraud-scorer from 3 to 6 pods to buy time}
+    - {at: 27, action: rollback, target: fraud-scorer, note: Ishita rolled the model back to v46}
+- n: 5
+  oncall: Tomás Ortega
+  author: Ananya Iyer
+  steps:
+    - {at: 7, action: rollback, target: ledger-svc, note: recognised the INC-4127 pattern and rolled back straight away}
+- n: 6
+  oncall: Tomás Ortega
+  author: Tomás Ortega
+  steps:
+    - {at: 6, action: scale_out, target: payments-svc, params: {replicas: "8"}, note: scaled payments-svc 4 -> 8; errors unchanged}
+    - {at: 12, action: restart, target: payments-svc, note: restarted payments-svc; brief dip, then back}
+    - {at: 20, action: flag_revert, target: checkout-api, params: {flag: checkout.retry_policy, value: standard}, note: noticed the retry_policy flag flip in the change log and reverted it}
+- n: 7
+  oncall: Tomás Ortega
+  author: Rohan Mehta
+  steps:
+    - {at: 5, action: pool_tuning, target: ledger-svc, params: {setting: maximum-pool-size, value: "40"}, note: followed RB-ledger-pool and raised the HikariCP pool to 40; Postgres got worse}
+    - {at: 15, action: rollback, target: ledger-svc, note: rolled back ledger-svc; the migration had already run so nothing changed}
+    - {at: 28, action: add_index, target: postgres-ledger, note: Rohan found the sequential scan and created the missing index concurrently}
+- n: 8
+  oncall: Tomás Ortega
+  author: Lena Fischer
+  steps:
+    - {at: 7, action: restart, target: auth-svc, note: treated it as an auth problem and restarted auth-svc; no change}
+    - {at: 15, action: scale_out, target: notifications-worker, params: {replicas: "8"}, note: followed RB-kafka-consumer-lag and scaled consumers 4 -> 8; rebalances got worse}
+    - {at: 27, action: rollback, target: notifications-worker, note: Lena rolled back the template-engine deploy}
+- n: 9
+  oncall: Meera Pillai
+  author: Meera Pillai
+  steps:
+    - {at: 12, action: psp_failover, target: payments-svc, params: {to: paynova}, note: found INC-4133's postmortem, checked psp_http_429_rate and failed over}
+- n: 10
+  oncall: Meera Pillai
+  author: Deepak Rao
+  steps:
+    - {at: 7, action: cert_rotation, target: edge-gateway, note: assumed a repeat of INC-4146 and rotated the edge-gateway certificate; no change}
+    - {at: 16, action: restart, target: auth-svc, note: restarted auth-svc; partial relief for a few minutes}
+    - {at: 25, action: node_drain, target: "{{skew_node}}", note: Deepak found one node's clock far off and drained it}
+- n: 11
+  oncall: Meera Pillai
+  author: Sara Kim
+  steps:
+    - {at: 6, action: restart, target: ledger-svc, note: restarted ledger-svc; no change}
+    - {at: 12, action: cache_warmup, target: ledger-svc, note: Sara enabled request coalescing and warmed the balance cache}
+- n: 12
+  oncall: Meera Pillai
+  author: Farhan Qureshi
+  steps:
+    - {at: 6, action: pool_tuning, target: ledger-svc, params: {setting: maximum-pool-size, value: "20"}, note: followed RB-ledger-pool and raised the HikariCP pool; nothing changed}
+    - {at: 14, action: restart, target: ledger-svc, note: restarted ledger-svc; three minutes of relief}
+    - {at: 22, action: pool_tuning, target: pgbouncer-ledger, params: {setting: default_pool_size, value: "40"}, note: Farhan saw pgbouncer_cl_waiting climbing and raised default_pool_size; rolled back 3.16.3 afterwards}
+- n: 13
+  oncall: Deepak Rao
+  author: Sara Kim
+  steps:
+    - {at: 6, action: restart, target: checkout-api, note: restarted checkout-api; no change}
+    - {at: 13, action: scale_out, target: coredns, params: {replicas: "6"}, note: scaled CoreDNS 2 -> 6 and planned NodeLocal DNSCache}
+- n: 14
+  oncall: Deepak Rao
+  author: Deepak Rao
+  steps:
+    - {at: 7, action: cache_warmup, target: redis-cache, note: "followed RB-cache-failover; redis-cache no longer exists after the Valkey migration"}
+    - {at: 9, action: cache_warmup, target: valkey-cache, note: warmed the cache on valkey-cache instead}
+- n: 15
+  oncall: Deepak Rao
+  author: Vikram Shetty
+  steps:
+    - {at: 6, action: rollback, target: fraud-scorer, note: recognised the INC-4150 pattern and rolled the model back to v51}
+- n: 16
+  oncall: Deepak Rao
+  author: Arjun Nair
+  steps:
+    - {at: 8, action: cert_rotation, target: edge-gateway, note: renewed the certificate; also reported the injection attempt and the leaked token to security}
+- n: 17
+  oncall: Priya Raman
+  author: Tomás Ortega
+  steps:
+    - {at: 6, action: restart, target: payments-svc, note: restarted payments-svc; no change}
+    - {at: 12, action: scale_out, target: payments-svc, params: {replicas: "8"}, note: scaled payments-svc 4 -> 8; partial relief}
+    - {at: 20, action: limits_revert, target: payments-svc, note: noticed cpu_throttle_ratio and reverted the Helm CPU limit to 2000m}
+- n: 18
+  oncall: Priya Raman
+  author: Neha Kulkarni
+  steps:
+    - {at: 7, action: add_index, target: postgres-ledger, note: "saw the Seq Scan, remembered INC-4186 and did not touch the pool; created the index"}
+- n: 19
+  oncall: Priya Raman
+  author: Kofi Mensah
+  steps:
+    - {at: 8, action: rollback, target: notifications-worker, note: rolled back notifications-worker; no change}
+  page: {at: 14, team: Messaging}
+  external_resolution_at: 41
+  external_resolution: smsbridge raised the account quota after Kofi reached the account manager
+- n: 20
+  oncall: Priya Raman
+  author: Priya Raman
+  steps:
+    - {at: 5, action: flag_revert, target: checkout-api, params: {flag: checkout.retry_policy, value: standard}, note: recognised the INC-4178 pattern and reverted the flag}
+- n: 21
+  oncall: Farhan Qureshi
+  author: Ananya Iyer
+  steps:
+    - {at: 6, action: rollback, target: ledger-svc, note: rolled back 3.19.0; pgbouncer_cl_waiting drained}
+- n: 22
+  oncall: Farhan Qureshi
+  author: Rohan Mehta
+  steps:
+    - {at: 5, action: restart, target: ledger-svc, note: restarted ledger-svc; no change}
+    - {at: 16, action: wal_cleanup, target: postgres-ledger, note: "Rohan dropped the inactive debezium_ledger slot and grew the volume; nobody restarted Postgres"}
+- n: 23
+  oncall: Farhan Qureshi
+  author: Meera Pillai
+  steps:
+    - {at: 8, action: node_drain, target: "{{skew_node}}", note: checked node_clock_offset_ms first (INC-4213) and drained the node}
+- n: 24
+  oncall: Farhan Qureshi
+  author: Sara Kim
+  steps:
+    - {at: 9, action: restart, target: checkout-api, note: restarted checkout-api; no change}
+    - {at: 18, action: node_drain, target: ip-10-42-2-14, note: Sara saw connect timeouts only to ap-south-1b addresses and cordoned both AZ-b nodes}
