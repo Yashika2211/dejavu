@@ -15,6 +15,7 @@ variants:
   error_add: {uniform: [18, 30]}
   failure_share: {uniform: [0.2, 0.3]}
   exp: {randint: [320, 360]}
+  flag_author: {choice: [Priya Raman, Tomás Ortega]}
 
 alert:
   name: PaymentsErrorRateHigh
@@ -38,7 +39,7 @@ effects:
       type: flag
       service: checkout-api
       at_offset: "{{onset - 3}}"
-      author: Tomás Ortega
+      author: "{{flag_author}}"
       summary: "flag checkout.retry_policy standard -> aggressive"
       trigger: true
       details:
