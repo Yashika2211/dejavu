@@ -128,6 +128,8 @@ relevant_evidence:
   - [get_traces, payments-svc]
   - [get_traces, checkout-api]
   - [check_dependency, acquirerx]
+  - [query_metrics, ledger-svc]  # ruling out the pool look-alike is legitimate work
+  - [query_metrics, postgres-ledger]
   - [get_runbook, payments-svc]
 
 correct_remediations:
