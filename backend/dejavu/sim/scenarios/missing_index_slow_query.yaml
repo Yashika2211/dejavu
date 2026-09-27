@@ -12,7 +12,6 @@ trigger: deploy
 
 variants:
   onset: {randint: [-13, -8]}
-  mig: {randint: [84, 96]}
   ledger_p99_add: {randint: [9000, 14000]}
   checkout_p99_add: {randint: [4800, 6600]}
   failure_share: {uniform: [0.18, 0.28]}
@@ -48,18 +47,18 @@ effects:
         prev_version: "{{prev_version_ledger_svc}}"
         pr: "{{pr}}"
         pr_title: Repartition ledger_entries for Q4 volume
-        diff: "adds Flyway migration V{{mig}}__repartition_ledger_entries.sql, applied on startup"
-        files: ["db/migration/V{{mig}}__repartition_ledger_entries.sql", LedgerEntryRepository.java]
+        diff: "adds Flyway migration V{{flyway_version}}__repartition_ledger_entries.sql, applied on startup"
+        files: ["db/migration/V{{flyway_version}}__repartition_ledger_entries.sql", LedgerEntryRepository.java]
         lines: "+212 -40"
   - event:
       type: schema_migration
       service: postgres-ledger
       at_offset: "{{onset - 3}}"
       author: "{{author}}"
-      summary: "Flyway V{{mig}}__repartition_ledger_entries applied by ledger-svc {{version_ledger_svc}}"
+      summary: "Flyway V{{flyway_version}}__repartition_ledger_entries applied by ledger-svc {{version_ledger_svc}}"
       trigger: true
       details:
-        migration: "V{{mig}}__repartition_ledger_entries"
+        migration: "V{{flyway_version}}__repartition_ledger_entries"
         diff: "recreates ledger_entries as a range-partitioned table (by created_at); indexes created: (id), (created_at)"
 
   - metric_shift: {service: postgres-ledger, metric: pg_cpu_pct, shape: ramp, mode: set, magnitude: 94, start_offset: "{{onset}}", ramp_minutes: 6, noise: 0.02}
@@ -139,7 +138,7 @@ relevant_evidence:
 
 correct_remediations:
   - {action: add_index, target: postgres-ledger, note: "CREATE INDEX CONCURRENTLY on (account_id, created_at) restores index scans; needs DBA approval"}
-  - {action: rollback, target: postgres-ledger, note: "rolling back the V{{mig}} migration restores the old table and its index"}
+  - {action: rollback, target: postgres-ledger, note: "rolling back the V{{flyway_version}} migration restores the old table and its index"}
 
 ineffective_remediations:
   - {action: rollback, target: ledger-svc, note: "an application rollback does not revert an applied Flyway migration; the index is still missing"}
