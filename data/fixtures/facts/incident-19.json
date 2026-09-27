@@ -1,0 +1,53 @@
+{
+  "n": 19,
+  "incident_id": "INC-4316",
+  "date": "Fri 18 Sep 2026",
+  "alert_at": "08:05",
+  "onset_at": "07:57",
+  "oncall": "Priya Raman",
+  "author": "Kofi Mensah",
+  "alert_name": "AuthFailureRateHigh",
+  "alert_description": "authentication failure rate is 17.2% on auth-svc (threshold 12%)",
+  "root_cause_category": "novel",
+  "culprit_service": "smsbridge",
+  "culprit_owner_team": null,
+  "trigger": null,
+  "discriminators": [
+    "every smsbridge request is rejected with a 4xx",
+    "smsbridge says the account quota is exhausted",
+    "consumer lag is normal (this is not a rebalance storm)"
+  ],
+  "steps": [
+    {
+      "at": "08:13",
+      "minutes_after_alert": 8.0,
+      "action": "rollback",
+      "target": "notifications-worker",
+      "params": {},
+      "outcome": "no effect",
+      "note": "rolled back notifications-worker; no change"
+    }
+  ],
+  "page": {
+    "at": "08:19",
+    "team": "Messaging",
+    "lead": "Lena Fischer"
+  },
+  "resolved_at": "08:46",
+  "minutes_alert_to_recovery": 41.0,
+  "mttr_min": 44.0,
+  "impact_minutes": 49.0,
+  "failed_payments": 2137,
+  "inr_at_risk": 3954274,
+  "worked": [],
+  "did_not_work": [
+    "rollback notifications-worker"
+  ],
+  "made_worse": [],
+  "prevention": [
+    "owner_review"
+  ],
+  "migration_context": "14 days after the PgBouncer migration (M1, 3 Sep); 7 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": "smsbridge raised the account quota after Kofi reached the account manager"
+}
