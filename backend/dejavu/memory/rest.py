@@ -106,6 +106,12 @@ class HindsightRest:
             body["reason"] = reason
         return await self._request("PATCH", f"{self._bank(bank_id)}/memories/{memory_id}", json=body)
 
+    async def get_document(self, bank_id: str, document_id: str) -> dict[str, Any]:
+        """Stored document, including its (Memory Defense-scrubbed) original text."""
+        return await self._request(
+            "GET", f"{self._bank(bank_id)}/documents/{quote(document_id, safe='')}"
+        )
+
     # graph and entities -----------------------------------------------------------------
 
     async def graph(self, bank_id: str, **params: Any) -> dict[str, Any]:
