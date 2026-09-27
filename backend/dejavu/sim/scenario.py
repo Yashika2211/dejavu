@@ -2,7 +2,7 @@
 
 An archetype file declares effects layered on the baseline world, plus everything needed to grade
 an investigation: discriminators, relevant evidence, remediation outcomes and prevention.
-`{{name}}` placeholders are filled at instantiation from seed-randomised `variants`, schedule
+`{{name}}` (or `{{name - 3}}`) placeholders are filled at instantiation from seed-randomised `variants`, schedule
 overrides and the world at that moment (`cache`, `pool_max`, release versions, pods, nodes).
 Effects, discriminators and remediation rules can carry `when: pre_m1 | post_m1 | pre_m2 | post_m2`.
 """
@@ -27,7 +27,7 @@ from dejavu.sim.topology import NODES, Kind, LogFormat, Topology, topology_at
 from dejavu.taxonomy import Remediation, RootCause, SymptomClass
 
 SCENARIO_DIR = Path(__file__).parent / "scenarios"
-_PLACEHOLDER = re.compile(r"\{\{\s*(\w+)\s*\}\}")
+_PLACEHOLDER = re.compile(r"\{\{\s*(\w+)\s*(?:([+-])\s*(\d+(?:\.\d+)?))?\s*\}\}")
 
 
 class Level(StrEnum):
@@ -402,6 +402,15 @@ def _world_values(topology: Topology, culprit: str, alert_at: datetime) -> dict[
     return values
 
 
+def _resolve(match: re.Match[str], values: Mapping[str, Any]) -> Any:
+    """`{{name}}` or `{{name + 3}}` / `{{name - 2.5}}`."""
+    value = values[match.group(1)]
+    if match.group(2):
+        delta = float(match.group(3))
+        value = value + delta if match.group(2) == "+" else value - delta
+    return value
+
+
 def _fill(node: Any, values: Mapping[str, Any]) -> Any:
     if isinstance(node, dict):
         return {k: _fill(v, values) for k, v in node.items()}
@@ -410,8 +419,8 @@ def _fill(node: Any, values: Mapping[str, Any]) -> Any:
     if isinstance(node, str):
         whole = _PLACEHOLDER.fullmatch(node.strip())
         if whole:
-            return values[whole.group(1)]
-        return _PLACEHOLDER.sub(lambda m: str(values[m.group(1)]), node)
+            return _resolve(whole, values)
+        return _PLACEHOLDER.sub(lambda m: str(_resolve(m, values)), node)
     return node
 
 
