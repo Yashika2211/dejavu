@@ -16,7 +16,7 @@ _MASKS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"\b[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[a-z0-9]{9,10}-[a-z0-9]{5}\b"), "<pod>"),
     (re.compile(r"\b[a-z]+_[0-9a-f]{6,}\b"), "<id>"),
     (re.compile(r"\b0x[0-9a-f]+\b"), "<hex>"),
-    (re.compile(r"\b(?=[0-9a-f]*\d)[0-9a-f]{7,}\b"), "<hex>"),
+    (re.compile(r"\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{7,}\b"), "<hex>"),
     (re.compile(r"(?<![\w./\u00a7])-?\d+(?:\.\d+)*(?![\w])"), "<n>"),
 )
 # HTTP status codes carry meaning (200 vs 503), so they are shielded from number masking.
