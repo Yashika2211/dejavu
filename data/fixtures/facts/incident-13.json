@@ -1,0 +1,72 @@
+{
+  "n": 13,
+  "incident_id": "INC-4264",
+  "date": "Tue 08 Sep 2026",
+  "alert_at": "09:12",
+  "onset_at": "09:06",
+  "oncall": "Deepak Rao",
+  "author": "Sara Kim",
+  "alert_name": "EdgeGateway5xxHigh",
+  "alert_description": "edge-gateway 5xx rate is 11.5% across all routes (threshold 5%)",
+  "root_cause_category": "dns_resolution_failure",
+  "culprit_service": "coredns",
+  "culprit_owner_team": "Platform",
+  "trigger": {
+    "change_id": "chg-48b1fb",
+    "type": "infra",
+    "service": "nodes",
+    "summary": "node group ng-general-aps1 scaled 6 -> 11 nodes (pending pods: 23)",
+    "author": "cluster-autoscaler",
+    "at": "09:00",
+    "details": {
+      "diff": "scale-up triggered by 23 unschedulable pods after the nightly batch job fan-out"
+    }
+  },
+  "discriminators": [
+    "many services report DNS lookup errors from the same minute",
+    "ledger-svc also fails name resolution (not one service's problem)",
+    "CoreDNS latency is in the seconds and it is CPU-bound",
+    "lookups time out against the cluster DNS service IP",
+    "the node group scaled up just before the errors started"
+  ],
+  "steps": [
+    {
+      "at": "09:18",
+      "minutes_after_alert": 6.0,
+      "action": "restart",
+      "target": "checkout-api",
+      "params": {},
+      "outcome": "no effect",
+      "note": "restarted checkout-api; no change"
+    },
+    {
+      "at": "09:25",
+      "minutes_after_alert": 13.0,
+      "action": "scale_out",
+      "target": "coredns",
+      "params": {
+        "replicas": "6"
+      },
+      "outcome": "fixed it",
+      "note": "scaled CoreDNS 2 -> 6 and planned NodeLocal DNSCache"
+    }
+  ],
+  "page": null,
+  "resolved_at": "09:32",
+  "minutes_alert_to_recovery": 20.0,
+  "mttr_min": 23.0,
+  "impact_minutes": 26.0,
+  "failed_payments": 3119,
+  "inr_at_risk": 5770182,
+  "worked": [
+    "scale_out coredns"
+  ],
+  "did_not_work": [
+    "restart checkout-api"
+  ],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": "4 days after the PgBouncer migration (M1, 3 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
