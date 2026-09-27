@@ -248,6 +248,19 @@ class Signal(_Model):
     window_min: float = 15.0
     min_count: int = 1
 
+    @model_validator(mode="after")
+    def _complete(self) -> "Signal":
+        needed = {
+            "metric": ("service", "metric", "op", "value"),
+            "log": ("service", "contains"),
+            "trace": ("service",),
+            "change": (),
+        }[self.kind]
+        missing = [f for f in needed if getattr(self, f) is None]
+        if missing:
+            raise ValueError(f"{self.kind} signal needs {missing}")
+        return self
+
 
 class Discriminator(_Model):
     text: str
