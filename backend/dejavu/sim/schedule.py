@@ -78,7 +78,8 @@ def gauntlet(seed: int | None = None) -> list[Scenario]:
     """The 24 Gauntlet incidents in time order, for `seed` (default: the schedule's seed)."""
     schedule = load_schedule()
     seed = schedule.seed if seed is None else seed
-    ids = incident_ids(schedule.incidents, seed, schedule.first_incident_number)
+    # Ticket numbers belong to the calendar, not the seed: fixtures cite them across seeds.
+    ids = incident_ids(schedule.incidents, schedule.seed, schedule.first_incident_number)
     return [
         instantiate(
             e.archetype,
