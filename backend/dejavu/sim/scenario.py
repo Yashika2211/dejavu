@@ -11,7 +11,7 @@ import random
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -20,6 +20,7 @@ from typing import Annotated, Any, Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from dejavu.sim.clock import IST
 from dejavu.sim.migrations import Phase
 from dejavu.sim.releases import CADENCES, model_version_at, previous_version, version_at
 from dejavu.sim.rng import hex_id, pod_suffix, py_rng, replicaset_hash
@@ -415,6 +416,8 @@ def _world_values(topology: Topology, culprit: str, alert_at: datetime) -> dict[
         "model_version": model_version_at(alert_at),
         "prev_model_version": model_version_at(alert_at) - 1,
         "az_b_nodes": [n.name for n in NODES if n.zone == "ap-south-1b"],
+        # ledger-svc's Flyway migrations are numbered in the order they ship
+        "flyway_version": 80 + (alert_at.astimezone(IST).date() - date(2026, 8, 1)).days // 3,
     }
     for service in CADENCES:
         key = service.replace("-", "_")
