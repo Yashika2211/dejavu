@@ -1,0 +1,88 @@
+{
+  "n": 7,
+  "incident_id": "INC-4186",
+  "date": "Thu 27 Aug 2026",
+  "alert_at": "11:42",
+  "onset_at": "11:31",
+  "oncall": "Tom\u00e1s Ortega",
+  "author": "Rohan Mehta",
+  "alert_name": "CheckoutLatencyP99High",
+  "alert_description": "checkout-api p99 latency is 5,749 ms on POST /v1/checkout (threshold 2,000 ms)",
+  "root_cause_category": "missing_index_slow_query",
+  "culprit_service": "postgres-ledger",
+  "culprit_owner_team": "Data Platform",
+  "trigger": {
+    "change_id": "chg-f8a8a7",
+    "type": "schema_migration",
+    "service": "postgres-ledger",
+    "summary": "Flyway V90__repartition_ledger_entries applied by ledger-svc 3.15.1",
+    "author": "Farhan Qureshi",
+    "at": "11:27",
+    "details": {
+      "migration": "V90__repartition_ledger_entries",
+      "diff": "recreates ledger_entries as a range-partitioned table (by created_at); indexes created: (id), (created_at)"
+    }
+  },
+  "discriminators": [
+    "postgres-ledger CPU is pinned above 85%, so the database itself is the bottleneck",
+    "slow-query log shows a sequential scan on ledger_entries",
+    "slow queries per minute jump by two orders of magnitude",
+    "a schema migration ran on postgres-ledger just before the onset"
+  ],
+  "steps": [
+    {
+      "at": "11:47",
+      "minutes_after_alert": 5.0,
+      "action": "pool_tuning",
+      "target": "ledger-svc",
+      "params": {
+        "setting": "maximum-pool-size",
+        "value": "40"
+      },
+      "outcome": "made it worse",
+      "note": "followed RB-ledger-pool and raised the HikariCP pool to 40; Postgres got worse"
+    },
+    {
+      "at": "11:57",
+      "minutes_after_alert": 15.0,
+      "action": "rollback",
+      "target": "ledger-svc",
+      "params": {},
+      "outcome": "no effect",
+      "note": "rolled back ledger-svc; the migration had already run so nothing changed"
+    },
+    {
+      "at": "12:10",
+      "minutes_after_alert": 28.0,
+      "action": "add_index",
+      "target": "postgres-ledger",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Rohan found the sequential scan and created the missing index concurrently"
+    }
+  ],
+  "page": null,
+  "resolved_at": "12:29",
+  "minutes_alert_to_recovery": 47.0,
+  "mttr_min": 50.0,
+  "impact_minutes": 58.0,
+  "failed_payments": 30307,
+  "inr_at_risk": 56068355,
+  "worked": [
+    "add_index postgres-ledger"
+  ],
+  "did_not_work": [
+    "rollback ledger-svc"
+  ],
+  "made_worse": [
+    "pool_tuning ledger-svc"
+  ],
+  "prevention": [
+    "query_plan_review",
+    "canary_rollout",
+    "load_test"
+  ],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
