@@ -1,0 +1,61 @@
+{
+  "n": 3,
+  "incident_id": "INC-4146",
+  "date": "Thu 20 Aug 2026",
+  "alert_at": "21:37",
+  "onset_at": "21:31",
+  "oncall": "Priya Raman",
+  "author": "Arjun Nair",
+  "alert_name": "AuthFailureRateHigh",
+  "alert_description": "authentication failure rate is 36.1% on /v1/auth/* at the edge (threshold 20%)",
+  "root_cause_category": "cert_expiry",
+  "culprit_service": "edge-gateway",
+  "culprit_owner_team": "Platform",
+  "trigger": null,
+  "discriminators": [
+    "edge-gateway's mTLS certificate has zero days remaining",
+    "auth-svc rejects the handshake with x509 certificate has expired",
+    "requests stop reaching auth-svc (its traffic drops rather than its errors rising)",
+    "cert-manager has been failing to renew for a while"
+  ],
+  "steps": [
+    {
+      "at": "21:43",
+      "minutes_after_alert": 6.0,
+      "action": "restart",
+      "target": "auth-svc",
+      "params": {},
+      "outcome": "no effect",
+      "note": "restarted auth-svc; no change"
+    },
+    {
+      "at": "21:50",
+      "minutes_after_alert": 13.0,
+      "action": "cert_rotation",
+      "target": "edge-gateway",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Arjun renewed the edge-gateway-mtls certificate and fixed the issuer reference"
+    }
+  ],
+  "page": null,
+  "resolved_at": "21:59",
+  "minutes_alert_to_recovery": 22.0,
+  "mttr_min": 25.0,
+  "impact_minutes": 28.0,
+  "failed_payments": 12829,
+  "inr_at_risk": 23733998,
+  "worked": [
+    "cert_rotation edge-gateway"
+  ],
+  "did_not_work": [
+    "restart auth-svc"
+  ],
+  "made_worse": [],
+  "prevention": [
+    "owner_review"
+  ],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
