@@ -122,9 +122,12 @@ def human_paths(path: Path = HUMAN_PATHS) -> dict[int, HumanPath]:
 def _migration_context(scenario: Scenario) -> str | None:
     notes = []
     for m, label in ((M1, "PgBouncer migration (M1, 3 Sep)"), (M2, "Redis to Valkey migration (M2, 10 Sep)")):
-        days = (scenario.alert_at - m.at).days
-        if 0 <= days <= 14:
-            notes.append(f"{days} days after the {label}")
+        elapsed = scenario.alert_at - m.at
+        if elapsed.total_seconds() < 0 or elapsed.days > 14:
+            continue
+        hours = round(elapsed.total_seconds() / 3600)
+        when = f"{hours} hours" if elapsed.days < 1 else f"{elapsed.days} days"
+        notes.append(f"{when} after the {label}")
     return "; ".join(notes) or None
 
 
