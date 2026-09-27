@@ -6,16 +6,18 @@ Live checklist. Phases are gates (spec Section 15).
 
 - [x] Repo initialised, spec saved, remote `Yashika2211/dejavu`
 - [x] CLAUDE.md, PROGRESS.md, DECISIONS.md
-- [ ] `.env.example`, backend `pyproject.toml` (uv, Python 3.12)
-- [ ] `dejavu.config` (pydantic-settings)
-- [ ] Health checks: Groq `GET /models`, Hindsight version
-- [ ] Hindsight SDK signatures verified (inspect + OpenAPI)
-- [ ] `scripts/spike_hindsight.py` with PASS/FAIL table
-- [ ] Makefile (`setup`, `test`, `health`, `spike`, `dev`)
-- [ ] `web/` Next.js scaffold (pnpm)
-- [ ] CI workflow (lint + unit tests)
-- [ ] `docs/HINDSIGHT_NOTES.md`
-- [ ] **DoD:** spike table all PASS or every FAIL documented with a workaround; notes written; `make test` runs
+- [x] `.env.example`, backend `pyproject.toml` (uv, Python 3.12)
+- [x] `dejavu.config` (pydantic-settings)
+- [x] Health checks: Groq `GET /models`, Hindsight version (`make health`)
+- [x] Hindsight SDK signatures verified (inspect + OpenAPI + docs), mismatches in `docs/HINDSIGHT_NOTES.md`
+- [x] `scripts/spike_hindsight.py` with PASS/FAIL table (26 checks; runs, blocked on key)
+- [x] Makefile (`setup`, `test`, `lint`, `fmt`, `health`, `spike`, `web`)
+- [x] `web/` Next.js 16 scaffold (pnpm), design tokens, builds
+- [ ] CI workflow: written locally, push blocked (token lacks `workflow` scope)
+- [x] `docs/HINDSIGHT_NOTES.md` (offline verification; live timings pending)
+- [x] `make test` runs: 27 passed, 1 live test skipped
+- [ ] **Blocked:** `HINDSIGHT_API_KEY` and `GROQ_API_KEY` needed in `.env` to run the live spike
+- [ ] **DoD:** spike table all PASS or every FAIL documented with a workaround
 - [ ] Paused for review
 
 ## Phase 1: SRE-Gym
