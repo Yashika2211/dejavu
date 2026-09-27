@@ -1,0 +1,179 @@
+# A ledger-svc deploy adds per-row lookups inside the posting transaction, so every request holds
+# a database connection far longer. Before M1 the HikariCP pool saturates; after M1 the queue
+# moves to PgBouncer and raising the HikariCP pool no longer does anything.
+id: db_pool_exhaustion
+title: Ledger connection pool exhaustion after a deploy
+symptom_class: latency_p99
+look_alike_group: A
+culprit_service: ledger-svc
+trigger: deploy
+
+variants:
+  onset: {randint: [-14, -9]}
+  waiting_peak: {randint: [110, 175]}
+  ledger_p99_add: {randint: [19000, 26000]}
+  checkout_p99_add: {randint: [5600, 7200]}
+  failure_share: {uniform: [0.22, 0.34]}
+  pr: {randint: [2180, 2260]}
+  author: {choice: [Farhan Qureshi, Ananya Iyer]}
+
+alert:
+  name: CheckoutLatencyP99High
+  service: checkout-api
+  summary: checkout-api p99 latency above 2s for 5 minutes
+  description: "checkout-api p99 latency is {value} on POST /v1/checkout (threshold 2,000 ms)"
+  metric_service: checkout-api
+  metric: latency_p99_ms
+  threshold: 2000
+  expr: 'histogram_quantile(0.99, sum by (le) (rate(http_server_duration_ms_bucket{service="checkout-api",route="/v1/checkout"}[5m]))) > 2000'
+  runbook: checkout-latency
+  labels: {team: payments}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset + 1}}"
+  ramp_minutes: 5
+
+effects:
+  - event:
+      type: deploy
+      service: ledger-svc
+      at_offset: "{{onset - 3}}"
+      author: "{{author}}"
+      summary: "ledger-svc {{prev_version}} -> {{version}}"
+      trigger: true
+      details:
+        version: "{{version}}"
+        prev_version: "{{prev_version}}"
+        pr: "{{pr}}"
+        pr_title: Enrich ledger postings with account tier
+        diff: LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block
+        files: [LedgerPostingService.java, AccountTierClient.java, LedgerPostingServiceTest.java]
+        lines: "+46 -9"
+
+  # connections are held for the whole transaction, so the pool pins at its maximum
+  - metric_shift: {service: ledger-svc, metric: db_pool_active, shape: ramp, mode: set, magnitude: "{{pool_max}}", start_offset: "{{onset}}", ramp_minutes: 3, noise: 0}
+  - metric_shift: {service: ledger-svc, metric: db_pool_pending, shape: ramp, magnitude: "{{waiting_peak}}", start_offset: "{{onset}}", ramp_minutes: 6, noise: 0.08, when: pre_m1}
+  - metric_shift: {service: ledger-svc, metric: db_pool_pending, shape: ramp, magnitude: 26, start_offset: "{{onset + 1}}", ramp_minutes: 6, noise: 0.15, when: post_m1}
+  - metric_shift: {service: pgbouncer-ledger, metric: pgbouncer_cl_waiting, shape: ramp, magnitude: "{{waiting_peak}}", start_offset: "{{onset}}", ramp_minutes: 6, noise: 0.08, when: post_m1}
+  - metric_shift: {service: postgres-ledger, metric: pg_active_connections, shape: ramp, mode: set, magnitude: 60, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.02, when: pre_m1}
+  - metric_shift: {service: postgres-ledger, metric: pg_active_connections, shape: ramp, mode: set, magnitude: 40, start_offset: "{{onset}}", ramp_minutes: 3, noise: 0.02, when: post_m1}
+  - metric_shift: {service: postgres-ledger, metric: pg_cpu_pct, shape: ramp, magnitude: 6, start_offset: "{{onset}}", ramp_minutes: 5}
+  - metric_shift: {service: ledger-svc, metric: latency_p99_ms, shape: ramp, magnitude: "{{ledger_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 5}
+  - metric_shift: {service: ledger-svc, metric: latency_p50_ms, shape: ramp, magnitude: 2400, start_offset: "{{onset}}", ramp_minutes: 5}
+  - metric_shift: {service: ledger-svc, metric: error_rate_5xx, shape: ramp, magnitude: 7.5, start_offset: "{{onset + 2}}", ramp_minutes: 4, noise: 0.15}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: "{{checkout_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 5}
+  - metric_shift: {service: checkout-api, metric: latency_p50_ms, shape: ramp, magnitude: 1500, start_offset: "{{onset}}", ramp_minutes: 5}
+  - metric_shift: {service: checkout-api, metric: error_rate_5xx, shape: ramp, magnitude: 4.5, start_offset: "{{onset + 2}}", ramp_minutes: 4, noise: 0.15}
+
+  - log_inject:
+      service: ledger-svc
+      level: WARN
+      logger: com.zaxxer.hikari.pool.HikariPool
+      thread: "nio-8080-exec-{n}"
+      template: "HikariPool-1 - Connection is not available, request timed out after 30000ms (total={{pool_max}}, active={{pool_max}}, idle=0, waiting={w})"
+      rate_per_min: 45
+      start_offset: "{{onset + 1}}"
+      vars: {n: {randint: [1, 200]}, w: {randint: [100, 175]}}
+      when: pre_m1
+  - log_inject:
+      service: ledger-svc
+      level: WARN
+      logger: com.zaxxer.hikari.pool.HikariPool
+      thread: "nio-8080-exec-{n}"
+      template: "HikariPool-1 - Connection is not available, request timed out after 30000ms (total={{pool_max}}, active={{pool_max}}, idle=0, waiting={w})"
+      rate_per_min: 10
+      start_offset: "{{onset + 2}}"
+      vars: {n: {randint: [1, 200]}, w: {randint: [12, 34]}}
+      when: post_m1
+  - log_inject:
+      service: ledger-svc
+      level: ERROR
+      logger: c.k.ledger.api.PostingController
+      thread: "nio-8080-exec-{n}"
+      template: "POST /entries failed: org.springframework.transaction.CannotCreateTransactionException: Could not open JPA EntityManager for transaction (account={a})"
+      rate_per_min: 14
+      start_offset: "{{onset + 2}}"
+      vars: {n: {randint: [1, 200]}, a: {choice: [acc_7f31c2, acc_19ab04, acc_c2e8d1, acc_4410fe, acc_88d0a3]}}
+  - log_inject:
+      service: pgbouncer-ledger
+      level: WARN
+      template: "C-0x{c}: ledger/ledger_app@{ip}:{port} pooler error: query_wait_timeout"
+      rate_per_min: 18
+      start_offset: "{{onset + 2}}"
+      vars: {c: {hex: 9}, ip: {pod_ip: ledger-svc}, port: {randint: [40000, 60999]}}
+      when: post_m1
+  - log_inject:
+      service: pgbouncer-ledger
+      level: INFO
+      template: "stats: {x} xacts/s, {q} queries/s, in {i} B/s, out {o} B/s, xact {xt} us, query {qt} us, wait {w} us"
+      rate_per_min: 1
+      start_offset: "{{onset + 1}}"
+      vars:
+        x: {randint: [60, 140]}
+        q: {randint: [300, 700]}
+        i: {randint: [120000, 300000]}
+        o: {randint: [400000, 900000]}
+        xt: {randint: [900000, 2400000]}
+        qt: {randint: [1500, 4000]}
+        w: {randint: [2100000, 4800000]}
+      when: post_m1
+  - log_inject:
+      service: checkout-api
+      level: ERROR
+      template: ledger call failed
+      fields: {reqId: "req-{r}", upstream: ledger-svc, err: ESOCKETTIMEDOUT, timeoutMs: 8000, trace_id: "{t}"}
+      rate_per_min: 22
+      start_offset: "{{onset + 1}}"
+      vars: {r: {hex: 8}, t: {hex: 32}}
+
+  - trace_delay: {service: ledger-svc, operation: HikariPool.getConnection, add_ms: [2500, 7800], share: 0.85, start_offset: "{{onset}}", error_share: 0.15, error: "HikariPool-1 - Connection is not available, request timed out after 30000ms", when: pre_m1}
+  - trace_delay: {service: ledger-svc, operation: JDBC executeUpdate, add_ms: [2500, 7800], share: 0.8, start_offset: "{{onset}}", error_share: 0.12, error: "ERROR: query_wait_timeout", when: post_m1}
+
+discriminators:
+  - text: db_pool_pending stays above zero while db_pool_active is pinned at the pool maximum
+    when: pre_m1
+    signal: {kind: metric, service: ledger-svc, metric: db_pool_pending, op: ">", value: 20}
+  - text: db_pool_active is pinned at the pool maximum
+    signal: {kind: metric, service: ledger-svc, metric: db_pool_active, op: ">", value: "{{pool_max - 1}}"}
+  - text: postgres-ledger CPU stays normal, so the database itself is not the bottleneck
+    signal: {kind: metric, service: postgres-ledger, metric: pg_cpu_pct, op: "<", value: 60}
+  - text: slow spans wait in HikariPool.getConnection
+    when: pre_m1
+    signal: {kind: trace, service: ledger-svc, operation: HikariPool.getConnection, min_delay_ms: 1000}
+  - text: clients queue in PgBouncer (pgbouncer_cl_waiting climbs)
+    when: post_m1
+    signal: {kind: metric, service: pgbouncer-ledger, metric: pgbouncer_cl_waiting, op: ">", value: 20}
+  - text: PgBouncer logs query_wait_timeout
+    when: post_m1
+    signal: {kind: log, service: pgbouncer-ledger, contains: query_wait_timeout}
+  - text: a ledger-svc deploy shortly before the onset
+    signal: {kind: change, service: ledger-svc, change_type: deploy, window_min: 60}
+
+relevant_evidence:
+  - [query_metrics, ledger-svc]
+  - [query_metrics, postgres-ledger]
+  - [query_metrics, pgbouncer-ledger]
+  - [query_metrics, checkout-api]
+  - [search_logs, ledger-svc]
+  - [search_logs, pgbouncer-ledger]
+  - [search_logs, checkout-api]
+  - [get_traces, ledger-svc]
+  - [get_traces, checkout-api]
+  - [get_runbook, ledger-svc]
+
+correct_remediations:
+  - {action: rollback, target: ledger-svc, note: "rolling ledger-svc back to {{prev_version}} removes the long transactions; the pool drains within minutes"}
+  - {action: pool_tuning, target: pgbouncer-ledger, when: post_m1, note: "raising PgBouncer default_pool_size relieves the server-side queue"}
+
+ineffective_remediations:
+  - {action: restart, target: ledger-svc, relief_minutes: 3, depth: 0.2, note: "fresh pools give about three minutes of relief, then the new code saturates them again"}
+  - {action: pool_tuning, target: ledger-svc, when: pre_m1, depth: 0.55, note: "a larger HikariCP pool absorbs part of the load; latency stays well above SLO"}
+  - {action: pool_tuning, target: ledger-svc, when: post_m1, note: "since the PgBouncer migration the HikariCP pool is not the bottleneck; raising it changes nothing"}
+  - {action: scale_out, target: ledger-svc, when: pre_m1, depth: 0.65, note: "more pods add connections; partial relief only"}
+  - {action: scale_out, target: ledger-svc, when: post_m1, note: "PgBouncer caps server connections; extra pods just queue"}
+
+harmful_remediations:
+  - {action: restart, target: postgres-ledger, worsen: 1.6, worsen_minutes: 8, consequence_minutes: 8, note: "restarting the primary drops every connection; writes fail for about eight minutes"}
+
+prevention: [canary_rollout, load_test, pool_config_review]
