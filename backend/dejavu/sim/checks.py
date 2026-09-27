@@ -35,8 +35,13 @@ def check_signal(world: IncidentWorld, sig: Signal) -> tuple[bool, str]:
         metric, compare, threshold = str(sig.metric), _OPS[str(sig.op)], float(sig.value or 0.0)
         observed = []
         for node, series in world.metric(service, metric).items():
-            window = series.values[series.minutes > world.now_min - sig.window_min]
-            observed.append((node, _stat(window, sig.stat)))
+            start = world.now_min - sig.window_min
+            window = series.values[series.minutes > start]
+            value = _stat(window, sig.stat)
+            if sig.relative:
+                before = series.values[(series.minutes <= start) & (series.minutes > start - 60)]
+                value /= max(float(np.median(before)), 1e-9)
+            observed.append((node, value))
         hits = [(n, v) for n, v in observed if compare(v, threshold)]
         node, value = hits[0] if hits else observed[0]
         where = f" on {node}" if node else ""
