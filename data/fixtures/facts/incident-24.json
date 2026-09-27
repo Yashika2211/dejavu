@@ -1,0 +1,58 @@
+{
+  "n": 24,
+  "incident_id": "INC-4361",
+  "date": "Sat 26 Sep 2026",
+  "alert_at": "15:10",
+  "onset_at": "15:03",
+  "oncall": "Farhan Qureshi",
+  "author": "Sara Kim",
+  "alert_name": "EdgeGateway5xxHigh",
+  "alert_description": "edge-gateway 5xx rate is 22.9% across all routes (threshold 5%)",
+  "root_cause_category": "novel",
+  "culprit_service": "nodes",
+  "culprit_owner_team": "Platform",
+  "trigger": null,
+  "discriminators": [
+    "errors are TCP connect timeouts to addresses in two subnets",
+    "DNS is healthy (CoreDNS latency normal)",
+    "the AZ-b nodes cannot reach the API server"
+  ],
+  "steps": [
+    {
+      "at": "15:19",
+      "minutes_after_alert": 9.0,
+      "action": "restart",
+      "target": "checkout-api",
+      "params": {},
+      "outcome": "no effect",
+      "note": "restarted checkout-api; no change"
+    },
+    {
+      "at": "15:28",
+      "minutes_after_alert": 18.0,
+      "action": "node_drain",
+      "target": "ip-10-42-2-14",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Sara saw connect timeouts only to ap-south-1b addresses and cordoned both AZ-b nodes"
+    }
+  ],
+  "page": null,
+  "resolved_at": "15:38",
+  "minutes_alert_to_recovery": 28.0,
+  "mttr_min": 31.0,
+  "impact_minutes": 35.0,
+  "failed_payments": 7508,
+  "inr_at_risk": 13890441,
+  "worked": [
+    "node_drain ip-10-42-2-14"
+  ],
+  "did_not_work": [
+    "restart checkout-api"
+  ],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
