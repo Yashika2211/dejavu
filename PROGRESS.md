@@ -21,7 +21,19 @@ Live checklist. Phases are gates (spec Section 15).
 - [ ] Paused for review
 
 ## Phase 1: SRE-Gym
-- [ ] not started
+
+- [x] Scenario DSL (`sim/scenario.py`): metric_shift, log_inject, trace_delay, event, placeholders with offsets, migration-conditional effects
+- [x] 12 + 3 archetypes (`sim/scenarios/*.yaml`), each validated across seeds and migration phases
+- [x] Gauntlet schedule (24 incidents), held-out set (6), demo incidents (`schedule.yaml`, `sim/schedule.py`)
+- [x] Generators: metrics (baseline + incident layers), logs (12 native formats), traces, change events, alerts
+- [x] Parquet telemetry + DuckDB store; deterministic content hash
+- [x] Remediation engine (resolves / transient / partial / no effect / harmful) and severity curve
+- [x] Impact model (excess failed payments x ₹1,850)
+- [x] Agent tools (10), bounded to 700 tokens, visibility capped at now
+- [x] Runbooks (8, some stale on purpose)
+- [x] `make sim-demo`
+- [x] **DoD tests:** determinism per seed, discriminators per archetype, token bounds, remediation outcomes per archetype (296 tests pass)
+- [ ] Human fixtures: Day-0 history, migration artifacts, per-incident postmortem / Slack thread / feedback
 
 ## Phase 2: agent + LLM layer + amnesiac
 - [ ] not started
