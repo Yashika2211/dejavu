@@ -47,7 +47,7 @@ effects:
       rate_per_min: 55
       start_offset: "{{onset}}"
       ramp_minutes: 1
-      vars: {ip: {pod_ip: edge-gateway}, port: {randint: [40000, 60999]}, expiry: {utc_at: "{{onset}}"}}
+      vars: {ip: {pod_ip: edge-gateway}, port: {randint: [40000, 60999]}, expiry: {utc_at: "{{onset - 0.5}}"}}
   - log_inject:
       service: edge-gateway
       level: WARN
