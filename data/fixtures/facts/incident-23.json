@@ -1,0 +1,47 @@
+{
+  "n": 23,
+  "incident_id": "INC-4356",
+  "date": "Thu 24 Sep 2026",
+  "alert_at": "22:40",
+  "onset_at": "22:31",
+  "oncall": "Farhan Qureshi",
+  "author": "Meera Pillai",
+  "alert_name": "AuthFailureRateHigh",
+  "alert_description": "authentication failure rate is 20.3% on auth-svc (threshold 12%)",
+  "root_cause_category": "clock_skew_jwt",
+  "culprit_service": "nodes",
+  "culprit_owner_team": "Platform",
+  "trigger": null,
+  "discriminators": [
+    "one node's clock is tens of seconds off while the others are within milliseconds",
+    "auth-svc rejects tokens as used before issued",
+    "only a fraction of auth requests fail (not all of them, as an expired cert would cause)"
+  ],
+  "steps": [
+    {
+      "at": "22:48",
+      "minutes_after_alert": 8.0,
+      "action": "node_drain",
+      "target": "ip-10-42-2-14",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "checked node_clock_offset_ms first (INC-4213) and drained the node"
+    }
+  ],
+  "page": null,
+  "resolved_at": "22:58",
+  "minutes_alert_to_recovery": 18.0,
+  "mttr_min": 21.0,
+  "impact_minutes": 27.0,
+  "failed_payments": 3537,
+  "inr_at_risk": 6543866,
+  "worked": [
+    "node_drain ip-10-42-2-14"
+  ],
+  "did_not_work": [],
+  "made_worse": [],
+  "prevention": [],
+  "migration_context": "14 days after the Redis to Valkey migration (M2, 10 Sep)",
+  "extras": [],
+  "external_resolution": null
+}
