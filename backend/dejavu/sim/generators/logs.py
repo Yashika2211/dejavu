@@ -756,7 +756,7 @@ def _injected(rows: LogRows, scenario: Scenario, effects: list[LogInject]) -> No
                     continue
                 ramp = min(1.0, (t + 1) / max(effect.ramp_minutes, 1.0))
                 if effect.exact:
-                    count = round(effect.rate_per_min * ramp)
+                    count = round(effect.rate_per_min)  # exact counts ignore the ramp
                     seconds = (np.arange(count) + 0.5) * 60 / max(count, 1) + rng.uniform(-2, 2, count)
                 else:
                     seconds = _minute_times(rng, effect.rate_per_min * ramp)
