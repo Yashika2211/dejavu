@@ -1,0 +1,154 @@
+# A Flyway migration shipped with a ledger-svc deploy recreates ledger_entries as a partitioned
+# table without the (account_id, created_at) index. Every statement lookup becomes a sequential
+# scan; Postgres CPU pins and the pool fills as a side effect. Same alert as pool exhaustion,
+# opposite fix: a bigger pool makes it worse.
+id: missing_index_slow_query
+title: Missing index after a schema migration
+symptom_class: latency_p99
+look_alike_group: A
+culprit_service: postgres-ledger
+culprit_aliases: [ledger-svc]
+trigger: deploy
+
+variants:
+  onset: {randint: [-13, -8]}
+  mig: {randint: [84, 96]}
+  ledger_p99_add: {randint: [9000, 14000]}
+  checkout_p99_add: {randint: [4800, 6600]}
+  failure_share: {uniform: [0.18, 0.28]}
+  pr: {randint: [2190, 2270]}
+  author: {choice: [Farhan Qureshi, Ananya Iyer]}
+
+alert:
+  name: CheckoutLatencyP99High
+  service: checkout-api
+  summary: checkout-api p99 latency above 2s for 5 minutes
+  description: "checkout-api p99 latency is {value} on POST /v1/checkout (threshold 2,000 ms)"
+  metric_service: checkout-api
+  metric: latency_p99_ms
+  threshold: 2000
+  expr: 'histogram_quantile(0.99, sum by (le) (rate(http_server_duration_ms_bucket{service="checkout-api",route="/v1/checkout"}[5m]))) > 2000'
+  runbook: checkout-latency
+  labels: {team: payments}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset + 1}}"
+  ramp_minutes: 6
+
+effects:
+  - event:
+      type: deploy
+      service: ledger-svc
+      at_offset: "{{onset - 5}}"
+      author: "{{author}}"
+      summary: "ledger-svc {{prev_version_ledger_svc}} -> {{version_ledger_svc}}"
+      details:
+        version: "{{version_ledger_svc}}"
+        prev_version: "{{prev_version_ledger_svc}}"
+        pr: "{{pr}}"
+        pr_title: Repartition ledger_entries for Q4 volume
+        diff: "adds Flyway migration V{{mig}}__repartition_ledger_entries.sql, applied on startup"
+        files: ["db/migration/V{{mig}}__repartition_ledger_entries.sql", LedgerEntryRepository.java]
+        lines: "+212 -40"
+  - event:
+      type: schema_migration
+      service: postgres-ledger
+      at_offset: "{{onset - 3}}"
+      author: "{{author}}"
+      summary: "Flyway V{{mig}}__repartition_ledger_entries applied by ledger-svc {{version_ledger_svc}}"
+      trigger: true
+      details:
+        migration: "V{{mig}}__repartition_ledger_entries"
+        diff: "recreates ledger_entries as a range-partitioned table (by created_at); indexes created: (id), (created_at)"
+
+  - metric_shift: {service: postgres-ledger, metric: pg_cpu_pct, shape: ramp, mode: set, magnitude: 94, start_offset: "{{onset}}", ramp_minutes: 6, noise: 0.02}
+  - metric_shift: {service: postgres-ledger, metric: pg_slow_queries_per_min, shape: ramp, magnitude: 320, start_offset: "{{onset}}", ramp_minutes: 5, noise: 0.1}
+  - metric_shift: {service: postgres-ledger, metric: pg_active_connections, shape: ramp, mode: set, magnitude: 60, start_offset: "{{onset + 1}}", ramp_minutes: 5, noise: 0.02, when: pre_m1}
+  - metric_shift: {service: postgres-ledger, metric: pg_active_connections, shape: ramp, mode: set, magnitude: 40, start_offset: "{{onset + 1}}", ramp_minutes: 5, noise: 0.02, when: post_m1}
+  - metric_shift: {service: ledger-svc, metric: db_pool_active, shape: ramp, mode: set, magnitude: "{{pool_max}}", start_offset: "{{onset + 1}}", ramp_minutes: 5, noise: 0}
+  - metric_shift: {service: ledger-svc, metric: db_pool_pending, shape: ramp, magnitude: 32, start_offset: "{{onset + 2}}", ramp_minutes: 6, noise: 0.15, when: pre_m1}
+  - metric_shift: {service: ledger-svc, metric: db_pool_pending, shape: ramp, magnitude: 12, start_offset: "{{onset + 2}}", ramp_minutes: 6, noise: 0.15, when: post_m1}
+  - metric_shift: {service: pgbouncer-ledger, metric: pgbouncer_cl_waiting, shape: ramp, magnitude: 45, start_offset: "{{onset + 2}}", ramp_minutes: 6, noise: 0.12, when: post_m1}
+  - metric_shift: {service: ledger-svc, metric: latency_p99_ms, shape: ramp, magnitude: "{{ledger_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 6}
+  - metric_shift: {service: ledger-svc, metric: latency_p50_ms, shape: ramp, magnitude: 2600, start_offset: "{{onset}}", ramp_minutes: 6}
+  - metric_shift: {service: ledger-svc, metric: error_rate_5xx, shape: ramp, magnitude: 5, start_offset: "{{onset + 3}}", ramp_minutes: 4, noise: 0.15}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: "{{checkout_p99_add}}", start_offset: "{{onset}}", ramp_minutes: 6}
+  - metric_shift: {service: checkout-api, metric: latency_p50_ms, shape: ramp, magnitude: 1300, start_offset: "{{onset}}", ramp_minutes: 6}
+  - metric_shift: {service: checkout-api, metric: error_rate_5xx, shape: ramp, magnitude: 3.5, start_offset: "{{onset + 3}}", ramp_minutes: 4, noise: 0.15}
+
+  - log_inject:
+      service: postgres-ledger
+      level: INFO
+      thread: "{pid}"
+      template: "duration: {ms} ms  execute <unnamed>: SELECT id, amount_paise, created_at FROM ledger_entries WHERE account_id = $1 ORDER BY created_at DESC LIMIT 50"
+      rate_per_min: 60
+      start_offset: "{{onset}}"
+      ramp_minutes: 4
+      vars: {pid: {randint: [30000, 59999]}, ms: {uniform: [2400, 6800], fmt: ".3f"}}
+  - log_inject:
+      service: postgres-ledger
+      level: INFO
+      thread: "{pid}"
+      template: "duration: {ms} ms  plan: Limit (rows=50) -> Sort (Sort Key: created_at DESC) -> Seq Scan on ledger_entries_2026q3 (rows=18423117) Filter: (account_id = $1) Rows Removed by Filter: {removed}"
+      rate_per_min: 6
+      start_offset: "{{onset}}"
+      vars: {pid: {randint: [30000, 59999]}, ms: {uniform: [2400, 6800], fmt: ".3f"}, removed: {randint: [18400000, 18423000]}}
+  - log_inject:
+      service: ledger-svc
+      level: WARN
+      logger: com.zaxxer.hikari.pool.HikariPool
+      thread: "nio-8080-exec-{n}"
+      template: "HikariPool-1 - Connection is not available, request timed out after 30000ms (total={{pool_max}}, active={{pool_max}}, idle=0, waiting={w})"
+      rate_per_min: 12
+      start_offset: "{{onset + 3}}"
+      vars: {n: {randint: [1, 200]}, w: {randint: [8, 40]}}
+  - log_inject:
+      service: checkout-api
+      level: ERROR
+      template: ledger call failed
+      fields: {reqId: "req-{r}", upstream: ledger-svc, err: ESOCKETTIMEDOUT, timeoutMs: 8000, trace_id: "{t}"}
+      rate_per_min: 18
+      start_offset: "{{onset + 1}}"
+      vars: {r: {hex: 8}, t: {hex: 32}}
+
+  - trace_delay: {service: postgres-ledger, operation: SELECT ledger_entries, add_ms: [2400, 6200], share: 0.85, start_offset: "{{onset}}"}
+  - trace_delay: {service: postgres-ledger, operation: INSERT ledger_entries, add_ms: [200, 900], share: 0.6, start_offset: "{{onset}}"}
+
+discriminators:
+  - text: postgres-ledger CPU is pinned above 85%, so the database itself is the bottleneck
+    signal: {kind: metric, service: postgres-ledger, metric: pg_cpu_pct, op: ">", value: 85}
+  - text: slow-query log shows a sequential scan on ledger_entries
+    signal: {kind: log, service: postgres-ledger, contains: Seq Scan}
+  - text: slow queries per minute jump by two orders of magnitude
+    signal: {kind: metric, service: postgres-ledger, metric: pg_slow_queries_per_min, op: ">", value: 50}
+  - text: a schema migration ran on postgres-ledger just before the onset
+    signal: {kind: change, service: postgres-ledger, change_type: schema_migration, window_min: 60}
+
+relevant_evidence:
+  - [query_metrics, postgres-ledger]
+  - [query_metrics, ledger-svc]
+  - [query_metrics, pgbouncer-ledger]
+  - [query_metrics, checkout-api]
+  - [search_logs, postgres-ledger]
+  - [search_logs, ledger-svc]
+  - [search_logs, checkout-api]
+  - [get_traces, ledger-svc]
+  - [get_traces, checkout-api]
+  - [get_traces, postgres-ledger]
+
+correct_remediations:
+  - {action: add_index, target: postgres-ledger, note: "CREATE INDEX CONCURRENTLY on (account_id, created_at) restores index scans; needs DBA approval"}
+  - {action: rollback, target: postgres-ledger, note: "rolling back the V{{mig}} migration restores the old table and its index"}
+
+ineffective_remediations:
+  - {action: rollback, target: ledger-svc, note: "an application rollback does not revert an applied Flyway migration; the index is still missing"}
+  - {action: restart, target: ledger-svc, note: "restarting the application does nothing for a query plan problem"}
+
+harmful_remediations:
+  - {action: pool_tuning, target: ledger-svc, worsen: 1.35, consequence_minutes: 10, note: "more connections mean more concurrent sequential scans; Postgres saturates further"}
+  - {action: pool_tuning, target: pgbouncer-ledger, when: post_m1, worsen: 1.35, consequence_minutes: 10, note: "a larger PgBouncer pool lets more sequential scans run at once"}
+  - {action: scale_out, target: ledger-svc, worsen: 1.2, consequence_minutes: 5, note: "extra pods open more connections into an already saturated database"}
+  - {action: restart, target: postgres-ledger, worsen: 1.6, worsen_minutes: 8, consequence_minutes: 8, note: "restarting the primary drops every connection and does not fix the plan"}
+
+prevention: [query_plan_review, canary_rollout, load_test]
