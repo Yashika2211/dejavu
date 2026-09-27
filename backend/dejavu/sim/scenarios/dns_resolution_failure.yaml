@@ -1,0 +1,156 @@
+# The cluster autoscaler adds five nodes; the new pods and DaemonSets multiply DNS traffic, and
+# with ndots:5 every external lookup fans out into several cluster-suffix queries. Two CoreDNS
+# replicas saturate and time out. Many services start failing in the same minute.
+id: dns_resolution_failure
+title: CoreDNS overload after a node scale-up
+symptom_class: error_rate_5xx
+look_alike_group: null
+culprit_service: coredns
+trigger: infra
+
+variants:
+  onset: {randint: [-8, -5]}
+  edge_5xx: {uniform: [9, 13]}
+  failure_share: {uniform: [0.15, 0.22]}
+
+alert:
+  name: EdgeGateway5xxHigh
+  service: edge-gateway
+  summary: edge-gateway 5xx rate above 5% for 5 minutes
+  description: "edge-gateway 5xx rate is {value} across all routes (threshold 5%)"
+  metric_service: edge-gateway
+  metric: error_rate_5xx
+  threshold: 5
+  expr: 'sum(rate(envoy_http_downstream_rq_xx{envoy_response_code_class="5"}[5m])) / sum(rate(envoy_http_downstream_rq_total[5m])) > 0.05'
+  runbook: edge-errors
+  labels: {team: platform}
+
+impact:
+  failure_share: "{{failure_share}}"
+  start_offset: "{{onset}}"
+  ramp_minutes: 2
+
+effects:
+  - event:
+      type: infra
+      service: nodes
+      at_offset: "{{onset - 6}}"
+      author: cluster-autoscaler
+      summary: "node group ng-general-aps1 scaled 6 -> 11 nodes (pending pods: 23)"
+      trigger: true
+      details: {diff: "scale-up triggered by 23 unschedulable pods after the nightly batch job fan-out"}
+
+  - metric_shift: {service: coredns, metric: rps, shape: ramp, mode: multiply, magnitude: 4.5, start_offset: "{{onset - 4}}", ramp_minutes: 5}
+  - metric_shift: {service: coredns, metric: latency_p99_ms, shape: ramp, magnitude: 2200, start_offset: "{{onset}}", ramp_minutes: 2}
+  - metric_shift: {service: coredns, metric: cpu_cores, shape: ramp, mode: set, magnitude: 0.99, start_offset: "{{onset - 1}}", ramp_minutes: 2, noise: 0.005}
+  - metric_shift: {service: coredns, metric: dns_lookup_errors, shape: ramp, magnitude: 420, start_offset: "{{onset}}", ramp_minutes: 2}
+  - metric_shift: {service: coredns, metric: restarts, shape: spike, magnitude: 1, start_offset: "{{onset + 2}}", period: 7, ramp_minutes: 1, noise: 0}
+  - metric_shift: {service: auth-svc, metric: dns_lookup_errors, shape: ramp, magnitude: 40, start_offset: "{{onset}}", ramp_minutes: 1}
+  - metric_shift: {service: checkout-api, metric: dns_lookup_errors, shape: ramp, magnitude: 60, start_offset: "{{onset}}", ramp_minutes: 1}
+  - metric_shift: {service: payments-svc, metric: dns_lookup_errors, shape: ramp, magnitude: 35, start_offset: "{{onset}}", ramp_minutes: 1}
+  - metric_shift: {service: ledger-svc, metric: dns_lookup_errors, shape: ramp, magnitude: 45, start_offset: "{{onset}}", ramp_minutes: 1}
+  - metric_shift: {service: edge-gateway, metric: error_rate_5xx, shape: ramp, magnitude: "{{edge_5xx}}", start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.08}
+  - metric_shift: {service: checkout-api, metric: error_rate_5xx, shape: ramp, magnitude: 8, start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.1}
+  - metric_shift: {service: payments-svc, metric: error_rate_5xx, shape: ramp, magnitude: 6, start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.1}
+  - metric_shift: {service: ledger-svc, metric: error_rate_5xx, shape: ramp, magnitude: 5, start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.1}
+  - metric_shift: {service: auth-svc, metric: error_rate_5xx, shape: ramp, magnitude: 4, start_offset: "{{onset}}", ramp_minutes: 1, noise: 0.1}
+  - metric_shift: {service: checkout-api, metric: latency_p99_ms, shape: ramp, magnitude: 1500, start_offset: "{{onset}}", ramp_minutes: 1}
+  - metric_shift: {service: edge-gateway, metric: latency_p99_ms, shape: ramp, magnitude: 900, start_offset: "{{onset}}", ramp_minutes: 1}
+
+  - log_inject:
+      service: payments-svc
+      level: ERROR
+      caller: psp/client.go:74
+      template: upstream call failed
+      fields: {upstream: ledger-svc, error: "dial tcp: lookup ledger-svc.prod.svc.cluster.local on 172.20.0.10:53: read udp {ip}:{port}->172.20.0.10:53: i/o timeout"}
+      rate_per_min: 30
+      start_offset: "{{onset}}"
+      vars: {ip: {pod_ip: payments-svc}, port: {randint: [30000, 60999]}}
+  - log_inject:
+      service: auth-svc
+      level: ERROR
+      caller: session/store.go:102
+      template: cache call failed
+      fields: {error: "dial tcp: lookup {{cache}}.prod.svc.cluster.local on 172.20.0.10:53: read udp {ip}:{port}->172.20.0.10:53: i/o timeout"}
+      rate_per_min: 25
+      start_offset: "{{onset}}"
+      vars: {ip: {pod_ip: auth-svc}, port: {randint: [30000, 60999]}}
+  - log_inject:
+      service: checkout-api
+      level: ERROR
+      template: "getaddrinfo EAI_AGAIN ledger-svc.prod.svc.cluster.local"
+      fields: {reqId: "req-{r}", upstream: ledger-svc, code: EAI_AGAIN}
+      rate_per_min: 35
+      start_offset: "{{onset}}"
+      vars: {r: {hex: 8}}
+  - log_inject:
+      service: ledger-svc
+      level: ERROR
+      logger: com.zaxxer.hikari.pool.HikariPool
+      thread: "nio-8080-exec-{n}"
+      template: "HikariPool-1 - Failed to validate connection: java.net.UnknownHostException: postgres-ledger.prod.svc.cluster.local: Temporary failure in name resolution"
+      rate_per_min: 12
+      start_offset: "{{onset}}"
+      vars: {n: {randint: [1, 200]}}
+  - log_inject:
+      service: coredns
+      level: ERROR
+      template: "plugin/errors: 2 {name}. A: read udp {ip}:{port}->10.0.0.2:53: i/o timeout"
+      rate_per_min: 40
+      start_offset: "{{onset}}"
+      vars:
+        name: {choice: [api.acquirerx.com.prod.svc.cluster.local, api.acquirerx.com.svc.cluster.local, api.paynova.io.cluster.local, api.smsbridge.in.ap-south-1.compute.internal]}
+        ip: {pod_ip: coredns}
+        port: {randint: [30000, 60999]}
+  - log_inject:
+      service: coredns
+      level: INFO
+      template: '{ip}:{port} - {id} "A IN {name}. udp {sz} false 512" NXDOMAIN qr,aa,rd {rs} {t}s'
+      rate_per_min: 30
+      start_offset: "{{onset - 4}}"
+      vars:
+        ip: {pod_ip: payments-svc}
+        port: {randint: [30000, 60999]}
+        id: {randint: [1000, 65000]}
+        name: {choice: [api.acquirerx.com.prod.svc.cluster.local, api.acquirerx.com.svc.cluster.local, api.acquirerx.com.cluster.local, api.paynova.io.prod.svc.cluster.local]}
+        sz: {randint: [60, 90]}
+        rs: {randint: [150, 180]}
+        t: {uniform: [0.0001, 0.0009], fmt: ".6f"}
+
+  - trace_delay: {service: checkout-api, operation: POST /v1/checkout, add_ms: [1000, 5000], share: 0.15, start_offset: "{{onset}}", error_share: 0.12, error: "getaddrinfo EAI_AGAIN ledger-svc.prod.svc.cluster.local"}
+
+discriminators:
+  - text: many services report DNS lookup errors from the same minute
+    signal: {kind: metric, service: checkout-api, metric: dns_lookup_errors, op: ">", value: 20}
+  - text: ledger-svc also fails name resolution (not one service's problem)
+    signal: {kind: metric, service: ledger-svc, metric: dns_lookup_errors, op: ">", value: 20}
+  - text: CoreDNS latency is in the seconds and it is CPU-bound
+    signal: {kind: metric, service: coredns, metric: latency_p99_ms, op: ">", value: 500}
+  - text: lookups time out against the cluster DNS service IP
+    signal: {kind: log, service: payments-svc, contains: "172.20.0.10:53: i/o timeout"}
+  - text: the node group scaled up just before the errors started
+    signal: {kind: change, service: nodes, change_type: infra, window_min: 60}
+
+relevant_evidence:
+  - [query_metrics, coredns]
+  - [query_metrics, edge-gateway]
+  - [query_metrics, checkout-api]
+  - [query_metrics, payments-svc]
+  - [query_metrics, ledger-svc]
+  - [search_logs, coredns]
+  - [search_logs, payments-svc]
+  - [search_logs, checkout-api]
+  - [search_logs, auth-svc]
+  - [search_logs, ledger-svc]
+  - [get_topology, coredns]
+
+correct_remediations:
+  - {action: scale_out, target: coredns, note: "more CoreDNS replicas absorb the query volume"}
+  - {action: config_tuning, target: coredns, note: "enabling NodeLocal DNSCache (and ndots:2 for external names) takes the load off CoreDNS"}
+
+ineffective_remediations:
+  - {action: rollback, note: "no application change caused this"}
+  - {action: restart, target: [checkout-api, payments-svc, ledger-svc, auth-svc, edge-gateway], note: "restarted pods resolve through the same overloaded CoreDNS"}
+  - {action: restart, target: coredns, relief_minutes: 2, depth: 0.6, note: "a restart clears the backlog briefly, then the load returns"}
+
+prevention: []
