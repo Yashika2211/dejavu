@@ -4,15 +4,20 @@ version = "0.1.0"
 description = "DejaVu: the on-call agent that has seen this before."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "duckdb>=1.1",
     "fpdf2>=2.8",
     "hindsight-client>=0.10.1",
     "httpx>=0.28",
+    "numpy>=2.1",
     "openai>=1.60",
+    "pyarrow>=18",
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
+    "pyyaml>=6.0",
     "rich>=13.9",
     "structlog>=24.4",
     "tenacity>=9.0",
+    "tiktoken>=0.8",
 ]
 
 [dependency-groups]
