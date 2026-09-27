@@ -31,7 +31,6 @@ class SymptomClass(StrEnum):
     LATENCY_P99 = "latency_p99"
     ERROR_RATE_5XX = "error_rate_5xx"
     AUTH_FAILURES = "auth_failures"
-    OTP_DELAYS = "otp_delays"
     WRITE_FAILURES = "write_failures"
 
 
@@ -50,6 +49,7 @@ class Remediation(StrEnum):
     WAL_CLEANUP = "wal_cleanup"
     ADD_INDEX = "add_index"
     LIMITS_REVERT = "limits_revert"
+    CONFIG_TUNING = "config_tuning"
 
 
 class Outcome(StrEnum):
