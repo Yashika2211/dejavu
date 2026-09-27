@@ -755,7 +755,12 @@ def _injected(rows: LogRows, scenario: Scenario, effects: list[LogInject]) -> No
                 if t < 0 or (effect.duration is not None and t >= effect.duration):
                     continue
                 ramp = min(1.0, (t + 1) / max(effect.ramp_minutes, 1.0))
-                for sec in _minute_times(rng, effect.rate_per_min * ramp):
+                if effect.exact:
+                    count = round(effect.rate_per_min * ramp)
+                    seconds = (np.arange(count) + 0.5) * 60 / max(count, 1) + rng.uniform(-2, 2, count)
+                else:
+                    seconds = _minute_times(rng, effect.rate_per_min * ramp)
+                for sec in seconds:
                     sampled = _sample(effect.vars, prng, ctx)
                     _emit(
                         rows,
@@ -766,7 +771,7 @@ def _injected(rows: LogRows, scenario: Scenario, effects: list[LogInject]) -> No
                         effect.level,
                         effect.template,
                         sampled,
-                        pod=prng.choice(pods),
+                        pod=effect.pod or prng.choice(pods),
                         logger=effect.logger,
                         thread=effect.thread,
                         caller=effect.caller,
