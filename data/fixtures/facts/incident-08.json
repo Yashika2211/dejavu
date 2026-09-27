@@ -1,0 +1,96 @@
+{
+  "n": 8,
+  "incident_id": "INC-4193",
+  "date": "Sat 29 Aug 2026",
+  "alert_at": "20:05",
+  "onset_at": "19:57",
+  "oncall": "Tom\u00e1s Ortega",
+  "author": "Lena Fischer",
+  "alert_name": "AuthFailureRateHigh",
+  "alert_description": "authentication failure rate is 15.1% on auth-svc (threshold 12%)",
+  "root_cause_category": "kafka_rebalance_storm",
+  "culprit_service": "notifications-worker",
+  "culprit_owner_team": "Messaging",
+  "trigger": {
+    "change_id": "chg-42c765",
+    "type": "deploy",
+    "service": "notifications-worker",
+    "summary": "notifications-worker 2.8.4 -> 2.9.2",
+    "author": "Kofi Mensah",
+    "at": "19:51",
+    "details": {
+      "version": "2.9.2",
+      "prev_version": "2.8.4",
+      "pr": 938,
+      "pr_title": "Render OTP SMS with the shared template engine",
+      "diff": "OtpTemplateRenderer now renders through TemplateEngine v2, which loads brand assets from S3 for every message",
+      "files": [
+        "OtpTemplateRenderer.kt",
+        "TemplateEngineConfig.kt",
+        "build.gradle.kts"
+      ],
+      "lines": "+133 -41"
+    }
+  },
+  "discriminators": [
+    "notifications-worker consumer lag climbs steadily",
+    "the consumer group keeps rebalancing",
+    "members leave the group because poll() took longer than max.poll.interval.ms",
+    "auth failures are OTP expiries, not token or certificate errors",
+    "a notifications-worker deploy shortly before"
+  ],
+  "steps": [
+    {
+      "at": "20:12",
+      "minutes_after_alert": 7.0,
+      "action": "restart",
+      "target": "auth-svc",
+      "params": {},
+      "outcome": "no effect",
+      "note": "treated it as an auth problem and restarted auth-svc; no change"
+    },
+    {
+      "at": "20:20",
+      "minutes_after_alert": 15.0,
+      "action": "scale_out",
+      "target": "notifications-worker",
+      "params": {
+        "replicas": "8"
+      },
+      "outcome": "made it worse",
+      "note": "followed RB-kafka-consumer-lag and scaled consumers 4 -> 8; rebalances got worse"
+    },
+    {
+      "at": "20:32",
+      "minutes_after_alert": 27.0,
+      "action": "rollback",
+      "target": "notifications-worker",
+      "params": {},
+      "outcome": "fixed it",
+      "note": "Lena rolled back the template-engine deploy"
+    }
+  ],
+  "page": null,
+  "resolved_at": "20:42",
+  "minutes_alert_to_recovery": 37.0,
+  "mttr_min": 40.0,
+  "impact_minutes": 45.0,
+  "failed_payments": 10604,
+  "inr_at_risk": 19617345,
+  "worked": [
+    "rollback notifications-worker"
+  ],
+  "did_not_work": [
+    "restart auth-svc"
+  ],
+  "made_worse": [
+    "scale_out notifications-worker"
+  ],
+  "prevention": [
+    "canary_rollout",
+    "load_test"
+  ],
+  "migration_context": null,
+  "extras": [],
+  "external_resolution": null
+}
