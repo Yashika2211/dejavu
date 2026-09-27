@@ -183,5 +183,5 @@ class TelemetryStore:
             SELECT * FROM spans WHERE trace_id IN (SELECT trace_id FROM hits) ORDER BY trace_id, start_offset_ms
             """,
             [start_ms, end_ms, *params],
-        ).fetch_arrow_table()
+        ).to_arrow_table()
         return rows.to_pylist()
