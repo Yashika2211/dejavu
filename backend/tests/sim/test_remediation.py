@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-from conftest import CASES, PRE, scenario_for
 
 from dejavu.agent.tools import execute
 from dejavu.sim.remediation import OutcomeKind
@@ -10,6 +9,7 @@ from dejavu.sim.scenario import RemediationRule
 from dejavu.sim.topology import NODES
 from dejavu.sim.world import IncidentWorld
 from dejavu.taxonomy import Remediation
+from tests.sim.cases import CASES, PRE, scenario_for
 
 START = 5.0
 
