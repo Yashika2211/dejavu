@@ -14,7 +14,6 @@ variants:
   lag_peak: {randint: [18000, 30000]}
   auth_4xx: {uniform: [12, 15]}
   failure_share: {uniform: [0.08, 0.12]}
-  pr: {randint: [900, 960]}
   author: {choice: [Lena Fischer, Kofi Mensah]}
 
 alert:
