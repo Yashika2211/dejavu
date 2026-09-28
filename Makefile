@@ -1,6 +1,7 @@
 .PHONY: setup test lint fmt health spike sim-demo run bank mini-sequence gauntlet gauntlet-quick report web
 
 BACKEND := cd backend &&
+ALL_STRATEGIES := amnesiac,rag,dejavu
 WEB := cd web &&
 
 setup:            ## install backend (uv) and web (pnpm) dependencies
@@ -36,7 +37,7 @@ mini-sequence:    ## live Phase 3 check: incidents 1, 5, 12 with DejaVu on a thr
 	$(BACKEND) uv run python scripts/mini_sequence.py
 
 gauntlet:         ## the full Gauntlet (STRATEGIES=amnesiac,rag,dejavu N=24 SEED=42; RESUME=1, DRY=1, SNAPSHOTS=1)
-	$(BACKEND) uv run python -m dejavu.eval.gauntlet $(if $(RESUME),--resume,--strategies $(or $(STRATEGIES),amnesiac,rag,dejavu) --seed $(or $(SEED),42)) $(if $(N),--n $(N),) $(if $(SNAPSHOTS),--snapshots,) $(if $(DRY),--dry-run,)
+	$(BACKEND) uv run python -m dejavu.eval.gauntlet $(if $(RESUME),--resume,--strategies $(or $(STRATEGIES),$(ALL_STRATEGIES)) --seed $(or $(SEED),42)) $(if $(N),--n $(N),) $(if $(SNAPSHOTS),--snapshots,) $(if $(DRY),--dry-run,)
 
 gauntlet-quick:   ## quick mode: the first 6 incidents, amnesiac and dejavu
 	$(BACKEND) uv run python -m dejavu.eval.gauntlet --strategies amnesiac,dejavu --n 6 $(if $(DRY),--dry-run,)
