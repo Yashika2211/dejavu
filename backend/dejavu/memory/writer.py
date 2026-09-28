@@ -79,7 +79,7 @@ def entities_for(services: list[str], text: str) -> list[tuple[str, str]]:
 
 
 def _doc_kind(doc: Document) -> str:
-    return "migration" if doc.path.parent.name == "migrations" else doc.kind
+    return "migration" if doc.path is not None and doc.path.parent.name == "migrations" else doc.kind
 
 
 def document_item(doc: Document) -> RetainItem:
