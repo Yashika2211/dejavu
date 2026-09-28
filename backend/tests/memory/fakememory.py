@@ -7,12 +7,14 @@ number of polls. Real Hindsight behaviour is verified by the spike and the live 
 
 import re
 from collections import defaultdict
+from datetime import UTC, datetime
 from typing import Any
 
 from dejavu.memory.hindsight_adapter import (
     FileItem,
     MemoryHit,
     MemoryUnavailableError,
+    MentalModelState,
     ReflectAnswer,
     RetainItem,
 )
@@ -25,6 +27,7 @@ class FakeMemory:
         self.config: dict[str, dict[str, Any]] = defaultdict(dict)
         self.directives: dict[str, set[str]] = defaultdict(set)
         self.models: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
+        self.failed_refresh: dict[str, set[str]] = defaultdict(set)
         self.items: dict[str, list[RetainItem]] = defaultdict(list)
         self.files: dict[str, list[FileItem]] = defaultdict(list)
         self.ops: dict[str, int] = {}
@@ -124,8 +127,20 @@ class FakeMemory:
             "total_observations": len(self.items[bank_id]),
         }
 
-    async def mental_model_ids(self, bank_id: str) -> set[str]:
-        return set(self.models[bank_id])
+    async def mental_models(self, bank_id: str) -> list[MentalModelState]:
+        failed_at = datetime(2026, 9, 1, tzinfo=UTC)
+        return [
+            MentalModelState(
+                id=model_id,
+                name=spec["name"],
+                last_refresh_failed_at=failed_at if model_id in self.failed_refresh[bank_id] else None,
+            )
+            for model_id, spec in self.models[bank_id].items()
+        ]
+
+    async def refresh_mental_model(self, bank_id: str, model_id: str) -> str | None:
+        self.failed_refresh[bank_id].discard(model_id)
+        return self._op()
 
     async def create_mental_model(
         self,
