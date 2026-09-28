@@ -1,10 +1,10 @@
 """Same seed, byte-identical telemetry; different seed, different telemetry."""
 
 import pytest
-from conftest import POST_M2, PRE, scenario_for
 
 from dejavu.sim.schedule import gauntlet
 from dejavu.sim.telemetry import content_hash, ensure_telemetry, fingerprint, write_telemetry
+from tests.sim.cases import POST_M2, PRE, scenario_for
 
 
 @pytest.mark.parametrize(
