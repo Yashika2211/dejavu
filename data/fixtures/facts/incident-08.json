@@ -15,13 +15,13 @@
     "change_id": "chg-42c765",
     "type": "deploy",
     "service": "notifications-worker",
-    "summary": "notifications-worker 2.8.4 -> 2.9.2",
+    "summary": "notifications-worker 2.9.1 -> 2.9.2",
     "author": "Kofi Mensah",
     "at": "19:51",
     "details": {
       "version": "2.9.2",
-      "prev_version": "2.8.4",
-      "pr": 938,
+      "prev_version": "2.9.1",
+      "pr": 982,
       "pr_title": "Render OTP SMS with the shared template engine",
       "diff": "OtpTemplateRenderer now renders through TemplateEngine v2, which loads brand assets from S3 for every message",
       "files": [
