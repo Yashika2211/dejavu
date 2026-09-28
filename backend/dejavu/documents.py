@@ -34,7 +34,7 @@ class Document(BaseModel):
     format: Literal["md", "pdf"] = "md"
     incident_id: str | None = None
     body: str
-    path: Path
+    path: Path | None = None  # None for documents written in the war room rather than loaded from fixtures
 
 
 def parse(path: Path) -> Document:
