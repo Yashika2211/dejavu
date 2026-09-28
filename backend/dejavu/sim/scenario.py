@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from dejavu.sim.clock import IST
 from dejavu.sim.migrations import Phase
-from dejavu.sim.releases import CADENCES, model_version_at, previous_version, version_at
+from dejavu.sim.releases import CADENCES, model_version_at, pr_number, previous_version, version_at
 from dejavu.sim.rng import hex_id, pod_suffix, py_rng, replicaset_hash
 from dejavu.sim.topology import NODES, Kind, LogFormat, Topology, topology_at
 from dejavu.taxonomy import Remediation, RootCause, SymptomClass
@@ -423,9 +423,11 @@ def _world_values(topology: Topology, culprit: str, alert_at: datetime) -> dict[
         key = service.replace("-", "_")
         values[f"version_{key}"] = version_at(service, alert_at)
         values[f"prev_version_{key}"] = previous_version(service, alert_at)
+        values[f"pr_{key}"] = pr_number(service, alert_at)
     if culprit in CADENCES:
         values["version"] = version_at(culprit, alert_at)
         values["prev_version"] = previous_version(culprit, alert_at)
+        values["pr"] = pr_number(culprit, alert_at)
     return values
 
 
