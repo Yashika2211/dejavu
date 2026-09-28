@@ -391,6 +391,7 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
                         "document_id": "rfc-014",
                         "tags": ["org:kestrel", SERVICE_TAG, "kind:migration"],
                         "context": "migration RFC",
+                        "timestamp": "2026-08-20T11:00:00+05:30",
                     }
                 ],
             )
@@ -399,7 +400,10 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
             await spike.wait_op(op)
         mems = await spike.doc_memories("rfc-014")
         check(mems, "no units extracted from the PDF")
-        return f"PDF ingested: {len(mems)} units"
+        dates = sorted({str(m.get("mentioned_at") or m.get("date")) for m in mems})
+        notes["pdf_unit_dates"] = dates
+        honoured = any(d.startswith("2026-08-20") for d in dates)
+        return f"PDF ingested: {len(mems)} units; file timestamp {'honoured' if honoured else 'ignored'}"
 
     async def recall_full() -> str:
         r = await hs.arecall(
