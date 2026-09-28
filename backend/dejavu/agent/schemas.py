@@ -82,3 +82,6 @@ class AgentStep(BaseModel):
     cited_incidents: list[str] = Field(default_factory=list)
     model: str | None = None
     repaired: bool = False
+    outcome: str | None = Field(
+        None, description="For run_remediation: what the action did (resolves, no_effect, ...)"
+    )
