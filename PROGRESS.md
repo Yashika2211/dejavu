@@ -10,7 +10,7 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] `dejavu.config` (pydantic-settings)
 - [x] Health checks: Groq `GET /models`, Hindsight version (`make health`)
 - [x] Hindsight SDK signatures verified (inspect + OpenAPI + docs), mismatches in `docs/HINDSIGHT_NOTES.md`
-- [x] `scripts/spike_hindsight.py` with PASS/FAIL table (26 checks; runs, blocked on key)
+- [x] `scripts/spike_hindsight.py` with PASS/FAIL table (27 checks, including chunk mode for the RAG ablation; runs, blocked on key)
 - [x] Makefile (`setup`, `test`, `lint`, `fmt`, `health`, `spike`, `web`)
 - [x] `web/` Next.js 16 scaffold (pnpm), design tokens, builds
 - [ ] CI workflow: written locally, push blocked (token lacks `workflow` scope)
@@ -52,7 +52,18 @@ Live checklist. Phases are gates (spec Section 15).
 - [ ] **DoD (live, blocked on GROQ_API_KEY):** amnesiac end to end on real incidents; live injection test on incident 16
 
 ## Phase 3: DejaVu memory strategy
-- [ ] not started
+
+- [x] Memory adapter over the SDK + REST (`memory/hindsight_adapter.py`), one `MemoryBackend` interface, degraded mode on any failure
+- [x] Idempotent bank setup for the `dejavu` and `rag` profiles (`memory/bank_setup.py`, `scripts/bank_setup.py`, `make bank`)
+- [x] Missions, dispositions, entity labels, Memory Defense, 5 directives, 11 mental models (8 services + triage playbook, change-risk register, team conventions)
+- [x] Day-0 import with original dates; two PDFs through `retain_files` (`memory/day0.py`)
+- [x] Write path (`memory/writer.py`): alert timeline (append), first-person investigation log, outcome, change log, feedback, postmortem; low-cardinality tags, explicit observation scopes, entities, sanitised content
+- [x] Settle (`memory/settle.py`): retains, consolidation, pending work, manual refresh of paused mental models, timeouts
+- [x] Read path (`memory/reader.py`): triage brief (observations + reflect with `TriageBrief` schema and `based_on`, retry, fallback), `recall_memory` lookups
+- [x] DejaVu strategy (`strategies/dejavu.py`) and calendar-order sequence runner (`eval/sequence.py`)
+- [x] NaiveRAG ablation (`strategies/rag.py`) inheriting DejaVu's write path
+- [x] **DoD (offline):** bank setup idempotent, Day-0 import, write path, settle, briefing + provenance, lookups, degraded mode, three-incident mini-sequence plumbing (all with a fake memory; 445 tests pass)
+- [ ] **DoD (live, blocked on both keys):** `make mini-sequence` (incidents 1 → 5 → 12 on a throwaway bank) shows memory moments and temporal validity; mental models refreshing; live mini-sequence test
 
 ## Phase 4: the Gauntlet
 - [ ] not started
