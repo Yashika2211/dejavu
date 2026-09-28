@@ -13,6 +13,7 @@ from dejavu.config import Settings
 from dejavu.documents import Document
 from dejavu.eval.grading import DETECTION_MIN, HISTORICAL_CATEGORIES, IncidentScore, grade
 from dejavu.llm.client import LLMClient
+from dejavu.llm.errors import LLMError
 from dejavu.llm.models import usable_models
 from dejavu.llm.toolcalling import ToolCaller
 from dejavu.sim.scenario import Scenario
@@ -25,6 +26,8 @@ from dejavu.taxonomy import RootCause
 
 async def build_caller(settings: Settings, client: LLMClient | None = None) -> ToolCaller:
     """The agent's tool caller over every configured model the key can use, primary first."""
+    if client is None and settings.groq_api_key is None:
+        raise LLMError("GROQ_API_KEY is not set: add it to .env")
     client = client or LLMClient(settings)
     return ToolCaller(
         client, await usable_models(client, settings), reasoning_effort=settings.llm_reasoning_effort
