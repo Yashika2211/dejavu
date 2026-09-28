@@ -85,11 +85,26 @@ class ReflectAnswer(BaseModel):
     based_on: list[MemoryHit] = Field(default_factory=list)
 
 
+class MemoryUnit(BaseModel):
+    """A stored fact, experience or observation with its curation state (the Explorer's rows)."""
+
+    id: str
+    text: str
+    type: str | None = None
+    when: str | None = None
+    document_id: str | None = None
+    context: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    state: str = "valid"
+    invalidation_reason: str | None = None
+
+
 class MentalModelState(BaseModel):
     """A mental model's refresh bookkeeping."""
 
     id: str
     name: str = ""
+    tags: list[str] = Field(default_factory=list)
     last_refreshed_at: datetime | None = None
     last_refresh_failed_at: datetime | None = None
 
@@ -98,6 +113,18 @@ class MentalModelState(BaseModel):
         """A failed refresh pauses automatic ones until a manual refresh succeeds."""
         failed, ok = self.last_refresh_failed_at, self.last_refreshed_at
         return failed is not None and (ok is None or failed > ok)
+
+
+class MentalModelDetail(MentalModelState):
+    source_query: str | None = None
+    content: str | None = None
+
+
+class BeliefChange(BaseModel):
+    """One entry of a mental model's history: the content that was replaced, and when."""
+
+    previous_content: str
+    changed_at: datetime | None = None
 
 
 class MemoryBackend(Protocol):
@@ -147,6 +174,24 @@ class MemoryBackend(Protocol):
     async def mental_models(self, bank_id: str) -> list[MentalModelState]: ...
 
     async def refresh_mental_model(self, bank_id: str, model_id: str) -> str | None: ...
+
+    async def mental_model(self, bank_id: str, model_id: str) -> MentalModelDetail: ...
+
+    async def mental_model_history(self, bank_id: str, model_id: str) -> list[BeliefChange]: ...
+
+    async def list_memories(
+        self,
+        bank_id: str,
+        *,
+        query: str | None = None,
+        state: str | None = None,
+        fact_type: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryUnit]: ...
+
+    async def set_memory_state(
+        self, bank_id: str, memory_id: str, state: Literal["valid", "invalidated"], reason: str | None = None
+    ) -> None: ...
 
     async def create_mental_model(
         self,
@@ -321,6 +366,48 @@ class HindsightMemory:
     async def refresh_mental_model(self, bank_id: str, model_id: str) -> str | None:
         resp = _dump(await self._call(self._sdk.arefresh_mental_model(bank_id, model_id)))
         return resp.get("operation_id") if isinstance(resp, dict) else None
+
+    async def mental_model(self, bank_id: str, model_id: str) -> MentalModelDetail:
+        raw = await self._call(self._sdk.aget_mental_model(bank_id, model_id, detail="full"))
+        return MentalModelDetail.model_validate(_dump(raw))
+
+    async def mental_model_history(self, bank_id: str, model_id: str) -> list[BeliefChange]:
+        raw = _dump(await self._call(self._sdk.aget_mental_model_history(bank_id, model_id)))
+        entries = raw if isinstance(raw, list) else _items(raw)
+        return [BeliefChange.model_validate(_dump(e)) for e in entries]
+
+    async def list_memories(
+        self,
+        bank_id: str,
+        *,
+        query: str | None = None,
+        state: str | None = None,
+        fact_type: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryUnit]:
+        params = {"q": query, "state": state, "type": fact_type, "limit": limit}
+        page = await self._call(
+            self._rest.list_memories(bank_id, **{k: v for k, v in params.items() if v is not None})
+        )
+        return [
+            MemoryUnit(
+                id=m["id"],
+                text=m.get("text") or "",
+                type=m.get("fact_type"),
+                when=m.get("mentioned_at") or m.get("date"),
+                document_id=m.get("document_id"),
+                context=m.get("context"),
+                tags=m.get("tags") or [],
+                state=m.get("state") or "valid",
+                invalidation_reason=m.get("invalidation_reason"),
+            )
+            for m in page.get("items", [])
+        ]
+
+    async def set_memory_state(
+        self, bank_id: str, memory_id: str, state: Literal["valid", "invalidated"], reason: str | None = None
+    ) -> None:
+        await self._call(self._rest.set_memory_state(bank_id, memory_id, state, reason))
 
     async def create_mental_model(
         self,
