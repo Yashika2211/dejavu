@@ -15,7 +15,7 @@ variants:
   ledger_p99_add: {randint: [9000, 14000]}
   checkout_p99_add: {randint: [4800, 6600]}
   failure_share: {uniform: [0.18, 0.28]}
-  pr: {randint: [2190, 2270]}
+  pr_title: {choice: [Repartition ledger_entries for Q4 volume]}
   author: {choice: [Farhan Qureshi, Ananya Iyer]}
 
 alert:
@@ -45,8 +45,8 @@ effects:
       details:
         version: "{{version_ledger_svc}}"
         prev_version: "{{prev_version_ledger_svc}}"
-        pr: "{{pr}}"
-        pr_title: Repartition ledger_entries for Q4 volume
+        pr: "{{pr_ledger_svc}}"
+        pr_title: "{{pr_title}}"
         diff: "adds Flyway migration V{{flyway_version}}__repartition_ledger_entries.sql, applied on startup"
         files: ["db/migration/V{{flyway_version}}__repartition_ledger_entries.sql", LedgerEntryRepository.java]
         lines: "+212 -40"
