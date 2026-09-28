@@ -138,6 +138,7 @@ class FakeMemory:
         }
 
     async def mental_models(self, bank_id: str) -> list[MentalModelState]:
+        self._check()
         failed_at = datetime(2026, 9, 1, tzinfo=UTC)
         return [
             MentalModelState(
