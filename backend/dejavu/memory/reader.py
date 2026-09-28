@@ -4,7 +4,8 @@ Briefing: observations recalled for the alert's service and symptom (`tags_match
 untagged Day-0 material stays visible), then a reflect with the TriageBrief schema and `based_on`
 citations. If reflect returns no structured output it is retried once, then the briefing falls
 back to the recalled observations. Lookups recall facts, experiences and observations at a low
-budget. Every read passes `query_timestamp` = the incident time, anchoring temporal ranking.
+budget. Every recall passes `query_timestamp` = the incident time, anchoring temporal ranking;
+reflect has no such parameter (0.10.1), so the triage query states the time in its text.
 """
 
 from pydantic import ValidationError
