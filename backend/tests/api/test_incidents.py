@@ -102,3 +102,16 @@ async def test_feedback_teaches_the_live_bank(api: Api) -> None:
     assert "Priya Raman (on-call) confirmed" in docs[f"fb-{incident}"].content
     feedback = (await api.http.get(f"/incidents/{incident}")).json()["feedback"]
     assert [(f["correct"], f["retained"]) for f in feedback] == [(True, True)]
+
+
+async def test_the_picker_and_the_change_log(api: Api) -> None:
+    offered = (await api.http.get("/scenarios")).json()
+    assert DEMO in offered["demos"]
+    assert "cert_expiry" in offered["archetypes"]
+    assert "pending" not in offered["archetypes"]
+
+    incident = (await api.http.post("/incidents", json={"scenario": DEMO})).json()["incident_id"]
+    changes = (await api.http.get(f"/incidents/{incident}/changes")).json()
+    assert changes
+    assert changes[0]["at"] >= changes[-1]["at"]  # newest first
+    assert any(c["service"] == "ledger-svc" and c["type"] == "deploy" for c in changes)
