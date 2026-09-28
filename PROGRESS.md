@@ -82,7 +82,7 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] Foresight backend: pending changes derived from latent incidents, risk reviews with and without memory, prevention rule of spec 8, simulated impact avoided
 - [x] Web (`web/`): War Room, Race, Memory (runbooks, timeline, explorer, growth), Learning, Foresight, Ask DejaVu (⌘K); empty, loading, offline and API-down states; reduced motion honoured
 - [x] Screenshot pass at 1440×900 and 1280×800 against the real API driven by a scripted model and a fake memory (layout only; nothing shown is a result)
-- [x] `pnpm lint` and `pnpm build` clean; backend 490+ tests pass
+- [x] `make test` green: ruff, web lint, 489 backend tests pass (4 live tests skipped without keys); `pnpm build` clean
 - [ ] **Blocked on both keys:** the same screens against real Groq + Hindsight (a real race, real briefings, real Foresight reviews)
 - [ ] Paused to show the UI
 
