@@ -15,3 +15,5 @@ One line each: decision, then why.
 - Kept Next.js 16's generated `web/AGENTS.md`. It points agents at the bundled docs for this Next version, and `next dev` re-creates it anyway.
 - `.github/workflows/ci.yml` exists locally but isn't pushed: the GitHub token lacks the `workflow` scope. It gets pushed after `gh auth refresh -s workflow`.
 - Phase 1 started before the Phase 0 live spike passed. The owner said "go" with no keys configured; the simulator needs no keys, and the spike runs as soon as `.env` has them.
+- Human-voice fixtures were written by Claude Code from simulator fact sheets, not generated through Groq (no key was available). `generate_fixtures.py` produces the fact sheets, and a test pins every figure in each postmortem to them.
+- Incident ticket numbers come from the calendar, not the run seed, so fixtures can cite them (e.g. "the INC-4127 pattern") across seeds. Details that vary with the seed, such as the skewed node's name, are exact only for seed 42.
