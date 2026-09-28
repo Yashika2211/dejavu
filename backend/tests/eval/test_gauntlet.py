@@ -104,3 +104,27 @@ async def test_a_stopped_run_resumes_where_it_stopped(
         (n, s) for n in (0, 1, 2) for s in ("rag", "dejavu")
     )
     assert groq.queue == []
+
+
+async def test_day1_snapshot_holds_only_the_day0_import(
+    make_client, settings, telemetry_root, tmp_path
+) -> None:
+    memory = FakeMemory()
+    run = new_run(42, 1, ["amnesiac", "dejavu"], [MODEL], LoopConfig(), snapshots=True)
+    client, _ = make_client()
+    gauntlet = Gauntlet(
+        run,
+        tmp_path / run.run_id,
+        caller=ToolCaller(client, [MODEL]),
+        memory=memory,
+        settings=settings,
+        trace_dir=None,
+        telemetry_root=telemetry_root,
+    )
+    await gauntlet.prepare()
+
+    assert run.snapshots_taken == ["day1"]
+    day1 = {i.document_id for i in memory.items[settings.dejavu_bank_day1]}
+    assert day1 == {i.document_id for i in memory.items[run.banks["dejavu"]]}
+    assert "pm-hist-3902" in day1
+    assert not any(doc.startswith("inc-") for doc in day1)
