@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from dejavu.sim.clock import IST
 from dejavu.sim.migrations import MIGRATIONS
-from dejavu.sim.releases import CADENCES, previous_version, version_at
+from dejavu.sim.releases import CADENCES, pr_number, previous_version, version_at
 from dejavu.sim.rng import hex_id, py_rng
 from dejavu.sim.scenario import ChangeType, EventEffect, Scenario
 from dejavu.sim.topology import TEAMS, topology_at
@@ -115,18 +115,6 @@ def _team_member(service: str, at: datetime, rng: Any) -> str:
     return rng.choice(team.members)
 
 
-def _pr_number(service: str, rng: Any) -> int:
-    base = {
-        "checkout-api": 3400,
-        "payments-svc": 1500,
-        "auth-svc": 800,
-        "ledger-svc": 2150,
-        "fraud-scorer": 610,
-        "notifications-worker": 890,
-    }.get(service, 100)
-    return base + rng.randint(0, 120)
-
-
 def _background_day(day: datetime, avoid: set[str]) -> list[ChangeEvent]:
     """Unrelated changes on one calendar day (weekends are quieter)."""
     rng = py_rng(BACKGROUND_SEED, day.date().isoformat())
@@ -154,7 +142,7 @@ def _background_day(day: datetime, avoid: set[str]) -> list[ChangeEvent]:
                         "version": new,
                         "prev_version": old,
                         "commit": hex_id(rng, 7),
-                        "pr": _pr_number(service, rng),
+                        "pr": pr_number(service, at, salt=rng.randint(0, 2)),
                         "pr_title": title,
                         "files": files,
                         "lines": lines,
@@ -184,7 +172,7 @@ def _scenario_event(e: EventEffect, scenario: Scenario) -> ChangeEvent:
     details = dict(e.details)
     if e.type == ChangeType.DEPLOY:
         details.setdefault("commit", hex_id(rng, 7))
-        details.setdefault("pr", _pr_number(e.service, rng))
+        details.setdefault("pr", pr_number(e.service, scenario.alert_at + timedelta(minutes=e.at_offset)))
     return ChangeEvent(
         id=e.id or f"chg-{hex_id(rng, 6)}",
         at=scenario.alert_at + timedelta(minutes=e.at_offset),
