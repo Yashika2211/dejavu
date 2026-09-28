@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     llm_rpm: int = 30
     llm_tpm: int = 8000
     llm_rpd: int = 1000
+    llm_prices: dict[str, list[float]] = {}  # USD per 1M tokens: {"model": [input, output]}
+    llm_timeout_s: float = 60.0
 
     # Hindsight
     hindsight_base_url: str = "https://api.hindsight.vectorize.io"
