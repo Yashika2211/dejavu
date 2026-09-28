@@ -1,6 +1,7 @@
 """The baseline: a capable agent that remembers nothing between incidents."""
 
 from dejavu.agent.schemas import AgentStep, Diagnosis
+from dejavu.documents import Document
 from dejavu.strategies.base import IncidentContext, MemoryBriefing, Resolution
 
 
@@ -21,4 +22,7 @@ class Amnesiac:
         return None
 
     async def on_resolution(self, resolution: Resolution) -> None:
+        return None
+
+    async def remember(self, docs: list[Document]) -> None:
         return None
