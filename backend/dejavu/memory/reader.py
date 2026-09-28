@@ -32,7 +32,7 @@ def read_tags(ctx: IncidentContext) -> list[str]:
     return tags
 
 
-def _hit_line(hit: MemoryHit) -> str:
+def hit_line(hit: MemoryHit) -> str:
     where = ", ".join(x for x in (hit.when[:10] if hit.when else "", hit.document_id or "") if x)
     kind = f"[{hit.type}] " if hit.type else ""
     return f"- {kind}{hit.text.strip()}" + (f" ({where})" if where else "")
@@ -119,7 +119,7 @@ async def triage_brief(memory: MemoryBackend, bank_id: str, ctx: IncidentContext
         text = render_brief(brief)
     elif observations:
         text = "What past incidents suggest (observations):\n" + "\n".join(
-            _hit_line(h) for h in observations[:8]
+            hit_line(h) for h in observations[:8]
         )
     else:
         text = "Memory has nothing about this alert yet."
@@ -149,7 +149,7 @@ async def lookup(memory: MemoryBackend, bank_id: str, query: str, ctx: IncidentC
         return f"Nothing in memory matches {query!r}."
     return fit_blocks(
         f"Memory results for {query!r} (priors, not facts):",
-        [_hit_line(h) for h in hits],
+        [hit_line(h) for h in hits],
         max_tokens=MAX_LOOKUP_TOKENS,
         more="results",
     )
