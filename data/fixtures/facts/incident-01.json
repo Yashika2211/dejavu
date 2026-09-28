@@ -15,13 +15,13 @@
     "change_id": "chg-c3e375",
     "type": "deploy",
     "service": "ledger-svc",
-    "summary": "ledger-svc 3.13.2 -> 3.14.0",
-    "author": "Ananya Iyer",
+    "summary": "ledger-svc 3.13.3 -> 3.14.0",
+    "author": "Farhan Qureshi",
     "at": "02:54",
     "details": {
       "version": "3.14.0",
-      "prev_version": "3.13.2",
-      "pr": 2218,
+      "prev_version": "3.13.3",
+      "pr": 2198,
       "pr_title": "Enrich ledger postings with account tier",
       "diff": "LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block",
       "files": [
