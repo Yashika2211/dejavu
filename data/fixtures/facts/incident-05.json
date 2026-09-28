@@ -21,15 +21,14 @@
     "details": {
       "version": "3.15.1",
       "prev_version": "3.15.0",
-      "pr": 2199,
-      "pr_title": "Enrich ledger postings with account tier",
-      "diff": "LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block",
+      "pr": 2220,
+      "pr_title": "Re-land account tier enrichment with batching",
+      "diff": "AccountTierClient.fetchTiers() batches the lookups per posting, but the batch call still runs inside the @Transactional block and can take 2 s under load",
       "files": [
         "LedgerPostingService.java",
-        "AccountTierClient.java",
-        "LedgerPostingServiceTest.java"
+        "AccountTierClient.java"
       ],
-      "lines": "+46 -9"
+      "lines": "+71 -38"
     }
   },
   "discriminators": [
