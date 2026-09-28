@@ -38,7 +38,18 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] **Phase 1 complete** (352 tests)
 
 ## Phase 2: agent + LLM layer + amnesiac
-- [ ] not started
+
+- [x] Groq client over the OpenAI SDK: own retry policy (429 retry-after, 5xx backoff), 413 / tool_use_failed / unknown-model errors, call accounting and cost
+- [x] Per-model rate limiter (RPM / TPM / RPD) that honours retry-after
+- [x] Tool calling: one call per turn, salvage of `failed_generation`, re-prompts, model fallback, JSON-mode emulation
+- [x] Startup model resolution (`GET /models`, unavailable models disabled)
+- [x] Agent schemas, system prompt, budgeted context (running summary + last steps verbatim, <= 6,000 tokens)
+- [x] Investigation loop: briefing injection, untrusted wrapping, sanitizer (secrets + injection), invalid-arg retries, final diagnosis, remediation plan, approvals hook, replayable JSONL traces
+- [x] Amnesiac strategy; memory strategy contract
+- [x] Grader (correct, ttd, MTTR rules, wasted steps, harmful actions, precedent precision, cost, ₹ at risk)
+- [x] `scripts/run_incident.py` / `make run`
+- [x] **DoD (offline):** loop tests with a scripted model, error-handling tests (tool_use_failed, invalid args, 429 retry-after, 5xx, 413), injection + leaked-token test, grader tests (414 tests pass)
+- [ ] **DoD (live, blocked on GROQ_API_KEY):** amnesiac end to end on real incidents; live injection test on incident 16
 
 ## Phase 3: DejaVu memory strategy
 - [ ] not started
