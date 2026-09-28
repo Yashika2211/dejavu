@@ -24,7 +24,7 @@ From 13:51 to 14:28 IST acquirerx rate-limited our merchant account (HTTP 429, `
 External: acquirerx throttling. The acquirerx status page said "All Systems Operational" until about 14:13, twenty minutes after it started.
 
 ## Timeline (IST)
-- 13:29 unrelated checkout-api deploy (UPI screen copy change)
+- 13:29 unrelated checkout-api deploy (retry banner copy tweak)
 - 13:51 acquirerx 429 rate climbs to ~30%
 - 14:03 CheckoutLatencyP99High fires (p99 5,382 ms)
 - 14:09 status.acquirerx.com: all operational
@@ -37,7 +37,7 @@ External: acquirerx throttling. The acquirerx status page said "All Systems Oper
 - Failover took two minutes once we decided.
 
 ## What went wrong
-- I rolled back the most recent deploy just because it was the most recent. It was a copy change.
+- I rolled back the most recent deploy just because it was the most recent. It only changed banner copy.
 - I trusted the status page.
 - I also checked DNS first because RB-checkout-latency says to. DNS was fine.
 
