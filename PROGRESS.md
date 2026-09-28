@@ -66,7 +66,15 @@ Live checklist. Phases are gates (spec Section 15).
 - [ ] **DoD (live, blocked on both keys):** `make mini-sequence` (incidents 1 → 5 → 12 on a throwaway bank) shows memory moments and temporal validity; mental models refreshing; live mini-sequence test
 
 ## Phase 4: the Gauntlet
-- [ ] not started
+
+- [x] Harness (`eval/gauntlet.py`, `make gauntlet`): strategies take turns per incident, checkpoint per (incident, strategy) pair, `--resume`, `--n`, `--dry-run` estimate, pinned model, ungraded aborts on LLM errors, memory growth per incident
+- [x] Metrics (`eval/metrics.py`): accuracy, MTTR, time to diagnosis, wasted and harmful steps, ₹ at risk, tokens, cost, precedent precision; per incident kind; paired comparison with the amnesiac; learning curves
+- [x] Report (`eval/report.py`, `make report`): `summary.json`, chart-ready `chart_data.json`, charts (MTTR per incident with M1/M2 markers and look-alike shading, cumulative accuracy, useful vs wasted steps, memory growth, cost); `--publish` writes `docs/EVAL_RESULTS.md` with limitations
+- [x] Snapshots (`memory/snapshots.py`): `kestrel-ops-day1` after the Day-0 import, `kestrel-ops-trained` after the full run (`--snapshots`)
+- [x] NaiveRAG strategy wired into the Gauntlet
+- [x] **Offline tests:** metrics, report, abort and resume with a scripted model and the fake memory (458 tests pass, 4 live skipped)
+- [ ] **Blocked on both keys:** `make gauntlet-quick` (6 incidents, amnesiac and dejavu), then `make gauntlet SNAPSHOTS=1` (24 incidents, all three strategies), then `make report PUBLISH=1`
+- [ ] Paused to show results (needs the runs above)
 
 ## Phase 5: API + UI
 - [ ] not started
