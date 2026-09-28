@@ -17,3 +17,4 @@ One line each: decision, then why.
 - Phase 1 started before the Phase 0 live spike passed. The owner said "go" with no keys configured; the simulator needs no keys, and the spike runs as soon as `.env` has them.
 - Human-voice fixtures were written by Claude Code from simulator fact sheets, not generated through Groq (no key was available). `generate_fixtures.py` produces the fact sheets, and a test pins every figure in each postmortem to them.
 - Incident ticket numbers come from the calendar, not the run seed, so fixtures can cite them (e.g. "the INC-4127 pattern") across seeds. Details that vary with the seed, such as the skewed node's name, are exact only for seed 42.
+- Default token prices: gpt-oss-120b $0.15/$0.60 per 1M tokens (from the spec); gpt-oss-20b $0.075/$0.30 and qwen3.8-27b $0.29/$0.59 are estimates. Reports label costs as estimates, and `LLM_PRICES` overrides them.
