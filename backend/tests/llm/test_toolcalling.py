@@ -1,10 +1,10 @@
 import json
 
 import pytest
-from conftest import completion, groq_error
 from pydantic import BaseModel
 
 from dejavu.llm.toolcalling import NoDecisionError, ToolCaller, salvage, tool_spec
+from tests.llm.fakegroq import completion, groq_error
 
 
 class QueryArgs(BaseModel):
