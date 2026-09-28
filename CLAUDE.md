@@ -27,7 +27,7 @@ make dev       # api + web
 - Never fabricate numbers. Anything user-facing comes from an eval run or is `{{placeholder}}`.
 - Secrets only in `.env`. Fake secret-shaped strings are generated at runtime from the seed, never committed.
 - Tags: never `incident:<id>` (fragments observations). Incident IDs go in `document_id` and `metadata`.
-- Always pass `timestamp` on retain and `query_timestamp` on recall/reflect (simulated time).
+- Always pass `timestamp` on retain and `query_timestamp` on recall (simulated time). Reflect has no `query_timestamp`; state the time in the query text.
 - Archetype ids/titles never appear in telemetry, tool output or incident IDs.
 - Typed Python, Pydantic v2, ruff-clean, small files, docstrings on public modules, tests for everything deterministic.
 
