@@ -32,6 +32,7 @@ class FakeMemory:
         self.reflects: list[dict[str, Any]] = []
         self.structured = structured
         self.pending_polls = pending_polls
+        self.consolidations = 0
         self.down = False
 
     def _check(self) -> None:
@@ -113,6 +114,7 @@ class FakeMemory:
         return "completed"
 
     async def consolidate(self, bank_id: str) -> str:
+        self.consolidations += 1
         return self._op()
 
     async def stats(self, bank_id: str) -> dict[str, Any]:
