@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from dejavu import __version__
-from dejavu.api.routes import demo, evals, health, incidents, memory, races
+from dejavu.api.routes import demo, evals, foresight, health, incidents, memory, races
 from dejavu.api.services import Services, UnknownStrategyError
 from dejavu.config import get_settings
 from dejavu.memory.hindsight_adapter import MemoryUnavailableError
@@ -56,7 +56,7 @@ def create_app(services: Services | None = None) -> FastAPI:
     async def unknown_strategy(_request: Request, exc: UnknownStrategyError) -> JSONResponse:
         return JSONResponse({"detail": f"unknown strategy {exc}"}, status_code=422)
 
-    for module in (health, incidents, races, memory, evals, demo):
+    for module in (health, incidents, races, memory, evals, foresight, demo):
         app.include_router(module.router)
     app.include_router(memory.ask_router)
     return app
