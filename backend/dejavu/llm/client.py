@@ -128,6 +128,7 @@ class LLMClient:
         self._on_call = on_call or (lambda _record: None)
         self._max_attempts = max_attempts
         self._rng = rng or random.Random()
+        self.calls: list[CallRecord] = []  # every call, for per-run accounting
 
     async def available_models(self) -> set[str]:
         """Ids of the models this key can use right now (inactive ones excluded)."""
@@ -149,8 +150,18 @@ class LLMClient:
         retries: int = 0,
         error: str | None = None,
     ) -> None:
-        cost = cost_usd(model, tin, tout, self._settings)
-        self._on_call(CallRecord(model, purpose, tin, tout, round(latency, 3), retries, cost, error))
+        record = CallRecord(
+            model,
+            purpose,
+            tin,
+            tout,
+            round(latency, 3),
+            retries,
+            cost_usd(model, tin, tout, self._settings),
+            error,
+        )
+        self.calls.append(record)
+        self._on_call(record)
 
     async def complete(
         self,
