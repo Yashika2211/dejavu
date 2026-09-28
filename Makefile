@@ -1,4 +1,4 @@
-.PHONY: setup test lint fmt health spike sim-demo run bank mini-sequence web
+.PHONY: setup test lint fmt health spike sim-demo run bank mini-sequence gauntlet gauntlet-quick report web
 
 BACKEND := cd backend &&
 WEB := cd web &&
@@ -34,6 +34,15 @@ bank:             ## set up a memory bank and import Day-0 (BANK=kestrel-ops-liv
 
 mini-sequence:    ## live Phase 3 check: incidents 1, 5, 12 with DejaVu on a throwaway bank
 	$(BACKEND) uv run python scripts/mini_sequence.py
+
+gauntlet:         ## the full Gauntlet (STRATEGIES=amnesiac,rag,dejavu N=24 SEED=42; RESUME=1, DRY=1, SNAPSHOTS=1)
+	$(BACKEND) uv run python -m dejavu.eval.gauntlet $(if $(RESUME),--resume,--strategies $(or $(STRATEGIES),amnesiac,rag,dejavu) --seed $(or $(SEED),42)) $(if $(N),--n $(N),) $(if $(SNAPSHOTS),--snapshots,) $(if $(DRY),--dry-run,)
+
+gauntlet-quick:   ## quick mode: the first 6 incidents, amnesiac and dejavu
+	$(BACKEND) uv run python -m dejavu.eval.gauntlet --strategies amnesiac,dejavu --n 6 $(if $(DRY),--dry-run,)
+
+report:           ## charts and summary for a run (RUN=<run id>, default the latest; PUBLISH=1 rewrites docs/EVAL_RESULTS.md)
+	$(BACKEND) uv run python -m dejavu.eval.report $(if $(RUN),--run-id $(RUN),) $(if $(PUBLISH),--publish,)
 
 web:              ## Next.js dev server
 	$(WEB) pnpm dev
