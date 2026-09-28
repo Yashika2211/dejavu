@@ -54,6 +54,16 @@ async def test_settle_waits_for_pending_operations() -> None:
     )  # three polls for the retain, three for consolidation
 
 
+async def test_settle_can_skip_consolidation() -> None:
+    memory = FakeMemory(pending_polls=3)
+    time = NoWait()
+    ops = await memory.retain("b", [])
+    report = await settle(memory, "b", ops, poll_s=2, consolidate=False, sleep=time.sleep, clock=time.clock)
+    assert not report.timed_out
+    assert time.slept == pytest.approx([2, 2, 2])  # the retain only
+    assert len(memory.ops) == 1
+
+
 async def test_settle_gives_up_at_the_timeout() -> None:
     memory = FakeMemory(pending_polls=100)
     time = NoWait()
