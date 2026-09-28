@@ -312,10 +312,11 @@ def _print_estimate(run: GauntletRun, run_dir: Path, settings: Settings) -> None
         run.models[0],
     )
     console.print(
-        f"{e.runs} incident runs ({e.memory_runs} with memory) on {', '.join(run.models)}. Upper bounds from the "
-        f"step budget: {e.max_llm_calls:,} LLM calls, {e.max_tokens_in:,} tokens in, {e.max_tokens_out:,} out, "
-        f"${e.max_usd:,.2f}. At LLM_RPD={settings.llm_rpd} that is at least {e.days_at_rpd} days of requests; "
-        f"at LLM_TPM={settings.llm_tpm}, at least {e.hours_at_tpm} hours of tokens. Tool-call repairs add calls."
+        f"{e.runs} incident runs ({e.memory_runs} with memory) on {', '.join(run.models)}. From the step budget "
+        f"(one call per step plus a final diagnosis; tool-call repairs add a few): up to {e.max_llm_calls:,} LLM "
+        f"calls, {e.max_tokens_in:,} tokens in and {e.max_tokens_out:,} out, about ${e.max_usd:,.2f}. At "
+        f"LLM_RPD={settings.llm_rpd} that is up to {e.days_at_rpd} days of requests; at "
+        f"LLM_TPM={settings.llm_tpm}, up to {e.hours_at_tpm} hours."
     )
 
 
