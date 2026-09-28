@@ -31,3 +31,11 @@ One line each: decision, then why.
 - `docs/EVAL_RESULTS.md` is only written by `report --publish` from a chosen run, so quick and partial runs never overwrite published results.
 - Snapshot banks are written only with `--snapshots`. Day1 is cloned straight after the Day-0 import, before the bank counts as prepared, so it can never contain an incident.
 - Incident kinds (first, recurrence, look-alike, novel) come from the schedule's notes and order, so the per-kind breakdown has a single definition.
+- UI primitives are Radix (popover, tabs, dialog) styled with Tailwind rather than the shadcn CLI. Same accessible building blocks, without generated files that fight the war-room tokens.
+- Animations use `motion` (Framer Motion's current package name).
+- Remediations on stateful targets wait for the war room's approval and are declined if nobody answers within `APPROVAL_TIMEOUT_S`. Races and the Gauntlet auto-approve and score the consequences.
+- In the war room, the live bank learns only from DejaVu's own runs plus the on-call human's feedback, retained in the background after `POST /feedback`. A War Room run by itself changes no memory.
+- Named demos keep their canonical incident ids (rehearsals replay the same variant); incidents created from an archetype or "surprise" get fresh ids from INC-4501.
+- A risky pending change is exactly the trigger change of a latent scenario, so the reviewer sees what would ship and the prevention rule has ground truth. "₹ at risk avoided" is the latent incident's simulated impact over its first 30 minutes, labelled as such.
+- The UI screenshot pass used a dev-only harness (scripted model, fake memory) kept out of the repo, so the layout could be checked without keys. Its numbers are not results and are never shown as such.
+
