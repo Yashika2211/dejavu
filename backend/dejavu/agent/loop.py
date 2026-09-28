@@ -34,10 +34,23 @@ from dejavu.strategies.base import IncidentContext, MemoryBriefing, MemoryStrate
 from dejavu.taxonomy import Remediation, RootCause
 
 INCIDENT_REF = re.compile(r"\bINC-\d{4}\b")
-Approver = Callable[[Remediation, str, dict[str, str]], Awaitable[bool]]
 
 
-async def auto_approve(_action: Remediation, _target: str, _params: dict[str, str]) -> bool:
+@dataclass(frozen=True)
+class Proposal:
+    """A remediation the agent wants to run, as the approving human sees it."""
+
+    action_id: str  # unique within the run: r1, r2, ...
+    action: Remediation
+    target: str
+    params: dict[str, str]
+    needs_approval: bool  # the target is critical (spec 5.5)
+
+
+Approver = Callable[[Proposal], Awaitable[bool]]
+
+
+async def auto_approve(_proposal: Proposal) -> bool:
     """The Gauntlet's simulated human approves every action; consequences are scored."""
     return True
 
@@ -367,16 +380,23 @@ class Investigator:
         except ValueError:
             return execute(world, "run_remediation", args)  # let the tool report the validation error
         target = str(args.get("target", ""))
-        params = {str(k): str(v) for k, v in (args.get("params") or {}).items()}
+        proposal = Proposal(
+            action_id=f"r{len(self.trace.of_type('remediation_proposed')) + 1}",
+            action=action,
+            target=target,
+            params={str(k): str(v) for k, v in (args.get("params") or {}).items()},
+            needs_approval=requires_approval(world.topology, target),
+        )
         self.trace.emit(
             "remediation_proposed",
             world.clock.elapsed_min,
+            action_id=proposal.action_id,
             action=action.value,
             target=target,
-            params=params,
-            needs_approval=requires_approval(world.topology, target),
+            params=proposal.params,
+            needs_approval=proposal.needs_approval,
         )
-        if not await self.approver(action, target, params):
+        if not await self.approver(proposal):
             return ToolResult(
                 tool="run_remediation",
                 output=f"{action.value} {target} was declined by the on-call human.",
