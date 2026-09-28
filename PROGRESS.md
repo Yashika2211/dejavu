@@ -33,7 +33,9 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] Runbooks (8, some stale on purpose)
 - [x] `make sim-demo`
 - [x] **DoD tests:** determinism per seed, discriminators per archetype, token bounds, remediation outcomes per archetype (296 tests pass)
-- [ ] Human fixtures: Day-0 history, migration artifacts, per-incident postmortem / Slack thread / feedback
+- [x] Human fixtures: Day-0 history (6 postmortems, handbook, 2 RFCs), M1/M2 RFCs + announcements, 24 x (postmortem, Slack thread, feedback)
+- [x] Fact sheets (`scripts/generate_fixtures.py`): human paths replayed in the simulator; tests prove every postmortem number matches
+- [x] **Phase 1 complete** (352 tests)
 
 ## Phase 2: agent + LLM layer + amnesiac
 - [ ] not started
