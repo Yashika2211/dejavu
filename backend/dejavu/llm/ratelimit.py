@@ -86,12 +86,19 @@ class RateLimiter:
 class RateLimiters:
     """One limiter per model, created on first use."""
 
-    def __init__(self, limits: Limits, **kwargs: object) -> None:
+    def __init__(
+        self,
+        limits: Limits,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    ) -> None:
         self._limits = limits
-        self._kwargs = kwargs
+        self._clock = clock
+        self._sleep = sleep
         self._by_model: dict[str, RateLimiter] = {}
 
     def for_model(self, model: str) -> RateLimiter:
         if model not in self._by_model:
-            self._by_model[model] = RateLimiter(self._limits, **self._kwargs)  # type: ignore[arg-type]
+            self._by_model[model] = RateLimiter(self._limits, clock=self._clock, sleep=self._sleep)
         return self._by_model[model]
