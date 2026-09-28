@@ -63,11 +63,24 @@ async def test_hindsight_version_and_disabled_features(settings: Settings) -> No
     respx.get("https://hindsight.test/version").respond(
         json={"api_version": "0.10.1", "features": {"observations": True, "worker": False}}
     )
+    banks = respx.get("https://hindsight.test/v1/default/banks").respond(json={"banks": []})
     async with httpx.AsyncClient() as client:
         result = await check_hindsight(client, settings)
     assert result.ok
     assert "0.10.1" in result.detail
     assert "worker" in result.detail
+    assert banks.calls.last.request.headers["Authorization"] == "Bearer test-hindsight-key"
+
+
+@respx.mock
+async def test_hindsight_needs_a_key_that_works(settings: Settings) -> None:
+    respx.get("https://hindsight.test/version").respond(json={"api_version": "0.10.1"})
+    respx.get("https://hindsight.test/v1/default/banks").respond(401)
+    async with httpx.AsyncClient() as client:
+        rejected = await check_hindsight(client, settings)
+        missing = await check_hindsight(client, settings.model_copy(update={"hindsight_api_key": None}))
+    assert (rejected.ok, rejected.detail) == (False, "HINDSIGHT_API_KEY rejected")
+    assert (missing.ok, missing.detail) == (False, "HINDSIGHT_API_KEY not set")
 
 
 @respx.mock
