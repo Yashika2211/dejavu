@@ -36,6 +36,7 @@ class ToolResult(BaseModel):
     output: str
     sim_minutes: float
     ok: bool = True
+    invalid_args: bool = False  # the model can fix these; the loop does not count them as steps
     ends_run: bool = False
     clock_advanced: bool = False
     data: dict[str, Any] = Field(default_factory=dict)
@@ -514,14 +515,22 @@ def execute(world: IncidentWorld, name: str, raw_args: dict[str, Any]) -> ToolRe
     tool = TOOLS.get(name)
     if tool is None:
         return ToolResult(
-            tool=name, ok=False, sim_minutes=0.0, output=f"unknown tool {name!r}; tools: {', '.join(TOOLS)}"
+            tool=name,
+            ok=False,
+            invalid_args=True,
+            sim_minutes=0.0,
+            output=f"unknown tool {name!r}; tools: {', '.join(TOOLS)}",
         )
     try:
         args = tool.args.model_validate(raw_args)
     except ValidationError as exc:
         problems = "; ".join(f"{'.'.join(map(str, e['loc'])) or 'args'}: {e['msg']}" for e in exc.errors())
         return ToolResult(
-            tool=name, ok=False, sim_minutes=0.0, output=f"invalid arguments for {name}: {problems}"
+            tool=name,
+            ok=False,
+            invalid_args=True,
+            sim_minutes=0.0,
+            output=f"invalid arguments for {name}: {problems}",
         )
     try:
         out = tool.fn(world, args)
