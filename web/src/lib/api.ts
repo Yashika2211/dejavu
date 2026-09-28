@@ -41,3 +41,6 @@ export const api = {
 };
 
 export const streamUrl = (path: string) => `${API_URL}${path}`;
+
+/** The API is down; the global health banner already says so. */
+export const unreachable = (error: unknown) => error instanceof ApiError && error.status === 0;
