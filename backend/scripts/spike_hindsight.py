@@ -181,6 +181,7 @@ def write_pdf(path: Path, lines: tuple[str, ...]) -> None:
 
 async def run_spike(spike: Spike, clone_bank: str) -> None:
     hs, rest, bank, notes = spike.hs, spike.rest, spike.bank, spike.notes
+    rag_bank = f"{bank}-rag"
     token = fake_jwt(seed=16)
 
     async def create_bank() -> str:
@@ -597,6 +598,34 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         check(archive, "empty archive")
         return f"archive {len(archive):,} bytes"
 
+    async def chunk_mode() -> str:
+        """The naive-RAG ablation needs a plain chunk store (spec 6.8): raw text back, top-k by query."""
+        await hs.acreate_bank(rag_bank, name="DejaVu spike (naive RAG)")
+        await hs.aupdate_bank_config(rag_bank, retain_extraction_mode="chunks", enable_observations=False)
+        notes["rag_bank_config"] = await hs.aget_bank_config(rag_bank)
+        sources = {"pm-hist-3902": doc.HIST_POSTMORTEM, "rb-ledger-pool": doc.STALE_RUNBOOK}
+        await hs.aretain_batch(
+            bank_id=rag_bank,
+            items=[
+                {"content": text, "document_id": doc_id, "timestamp": "2026-07-14T11:20:00+05:30"}
+                for doc_id, text in sources.items()
+            ],
+        )
+        r = await hs.arecall(
+            bank_id=rag_bank,
+            query="checkout-api p99 latency above 2s; HikariPool connection is not available",
+            budget="low",
+            max_tokens=2000,
+        )
+        notes["rag_recall"] = dump(r)
+        texts = [x.text for x in r.results]
+        check(texts, "chunk-mode recall returned nothing")
+        lines = [ln.strip() for text in sources.values() for ln in text.splitlines() if len(ln.strip()) > 40]
+        verbatim = [t for t in texts if any(ln in t for ln in lines)]
+        types = sorted({str(x.type) for x in r.results})
+        check(verbatim, f"results are not raw chunks (types {types}); build RAG locally instead")
+        return f"{len(texts)} results, {len(verbatim)} verbatim chunks, types {types}"
+
     run = spike.run
     sync_step = "retain (sync, tags/ts/doc/meta/entities/scopes)"
     async_step = "retain_batch async + operation poll"
@@ -626,6 +655,7 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
     await run("bank stats", stats, needs=("create bank",))
     await run("clone bank", clone, needs=("create bank",))
     await run("export bank", export, needs=("create bank",))
+    await run("chunk mode for the RAG ablation", chunk_mode)
 
 
 def print_table(results: list[StepResult]) -> None:
@@ -650,7 +680,7 @@ async def main(keep: bool) -> int:
             await run_spike(spike, clone_bank)
         finally:
             if not keep:
-                for b in (clone_bank, bank):
+                for b in (clone_bank, f"{bank}-rag", bank):
                     try:
                         await hs.adelete_bank(b)
                     except Exception as exc:
