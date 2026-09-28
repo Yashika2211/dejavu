@@ -11,9 +11,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from dejavu.memory.hindsight_adapter import (
+    BeliefChange,
     FileItem,
     MemoryHit,
     MemoryUnavailableError,
+    MemoryUnit,
+    MentalModelDetail,
     MentalModelState,
     ReflectAnswer,
     RetainItem,
@@ -28,6 +31,8 @@ class FakeMemory:
         self.directives: dict[str, set[str]] = defaultdict(set)
         self.models: dict[str, dict[str, dict[str, Any]]] = defaultdict(dict)
         self.failed_refresh: dict[str, set[str]] = defaultdict(set)
+        self.history: dict[tuple[str, str], list[BeliefChange]] = defaultdict(list)
+        self.states: dict[tuple[str, str], str] = {}
         self.items: dict[str, list[RetainItem]] = defaultdict(list)
         self.files: dict[str, list[FileItem]] = defaultdict(list)
         self.ops: dict[str, int] = {}
@@ -78,7 +83,12 @@ class FakeMemory:
 
     def _search(self, bank_id: str, query: str, tags: list[str] | None, limit: int = 5) -> list[RetainItem]:
         words = set(_WORD.findall(query.lower()))
-        pool = [i for i in self.items[bank_id] if not tags or not i.tags or set(tags) & set(i.tags)]
+        pool = [
+            i
+            for i in self.items[bank_id]
+            if (not tags or not i.tags or set(tags) & set(i.tags))
+            and self.states.get((bank_id, i.document_id)) != "invalidated"
+        ]
         scored = sorted(pool, key=lambda i: -len(words & set(_WORD.findall(i.content.lower()))))
         return [i for i in scored[:limit] if words & set(_WORD.findall(i.content.lower()))]
 
@@ -133,10 +143,65 @@ class FakeMemory:
             MentalModelState(
                 id=model_id,
                 name=spec["name"],
+                tags=spec["tags"],
                 last_refresh_failed_at=failed_at if model_id in self.failed_refresh[bank_id] else None,
             )
             for model_id, spec in self.models[bank_id].items()
         ]
+
+    async def mental_model(self, bank_id: str, model_id: str) -> MentalModelDetail:
+        self._check()
+        spec = self.models[bank_id].get(model_id)
+        if spec is None:
+            raise MemoryUnavailableError(f"404: no mental model {model_id}")
+        return MentalModelDetail(
+            id=model_id,
+            name=spec["name"],
+            tags=spec["tags"],
+            source_query=spec["source_query"],
+            content=spec.get("content", f"# {spec['name']}"),
+        )
+
+    async def mental_model_history(self, bank_id: str, model_id: str) -> list[BeliefChange]:
+        return list(self.history[(bank_id, model_id)])
+
+    async def list_memories(
+        self,
+        bank_id: str,
+        *,
+        query: str | None = None,
+        state: str | None = None,
+        fact_type: str | None = None,
+        limit: int = 50,
+    ) -> list[MemoryUnit]:
+        self._check()
+        words = set(_WORD.findall((query or "").lower()))
+        units = [
+            MemoryUnit(
+                id=i.document_id,
+                text=i.content,
+                type="world",
+                when=i.timestamp.isoformat(),
+                document_id=i.document_id,
+                context=i.context,
+                tags=i.tags,
+                state=self.states.get((bank_id, i.document_id), "valid"),
+            )
+            for i in self.items[bank_id]
+        ]
+        return [
+            u
+            for u in units
+            if (not words or words & set(_WORD.findall(u.text.lower())))
+            and (state is None or u.state == state)
+            and (fact_type is None or u.type == fact_type)
+        ][:limit]
+
+    async def set_memory_state(
+        self, bank_id: str, memory_id: str, state: str, reason: str | None = None
+    ) -> None:
+        self._check()
+        self.states[(bank_id, memory_id)] = state
 
     async def refresh_mental_model(self, bank_id: str, model_id: str) -> str | None:
         self.failed_refresh[bank_id].discard(model_id)
