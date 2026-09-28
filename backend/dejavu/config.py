@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     dejavu_bank_live: str = "kestrel-ops-live"
     dejavu_bank_trained: str = "kestrel-ops-trained"
     dejavu_bank_day1: str = "kestrel-ops-day1"
+    dejavu_bank_rag: str = "kestrel-ops-rag"  # the Naive RAG lane's chunk store, snapshot from the Gauntlet
 
     # App
     demo_mode: Literal["live", "replay"] = "live"
@@ -46,6 +47,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     web_port: int = 3000
     http_timeout_s: float = 30.0
+    approval_timeout_s: float = 120.0  # a critical remediation nobody approves in time is declined
 
     @field_validator("llm_fallbacks", mode="before")
     @classmethod
