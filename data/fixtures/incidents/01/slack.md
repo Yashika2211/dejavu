@@ -16,6 +16,6 @@ format: md
 **Priya Raman** 03:13 restarting ledger-svc pods to clear it
 **Priya Raman** 03:18 it came back. same errors. waiting=140 again
 **Farhan Qureshi** 03:19 here. 3.14.0 went out at 02:54, it does the tier lookup inside the transaction. pg cpu is fine so it's our pool, not the db
-**Farhan Qureshi** 03:21 rolling back to 3.13.2
+**Farhan Qureshi** 03:21 rolling back to 3.13.3
 **Priya Raman** 03:31 p99 back to ~450ms. pool pending 0. resolving
-**Farhan Qureshi** 03:32 thanks. I'll write it up, no more ledger deploys at 3am please 🙃
+**Farhan Qureshi** 03:32 thanks Priya. that was my deploy, sorry. I'll write it up, and no more ledger deploys at 3am
