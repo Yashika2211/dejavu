@@ -15,21 +15,20 @@
     "change_id": "chg-e3d988",
     "type": "deploy",
     "service": "ledger-svc",
-    "summary": "ledger-svc 3.18.2 -> 3.19.0",
+    "summary": "ledger-svc 3.18.3 -> 3.19.0",
     "author": "Ananya Iyer",
     "at": "11:07",
     "details": {
       "version": "3.19.0",
-      "prev_version": "3.18.2",
-      "pr": 2254,
-      "pr_title": "Enrich ledger postings with account tier",
-      "diff": "LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block",
+      "prev_version": "3.18.3",
+      "pr": 2305,
+      "pr_title": "Write the audit trail synchronously",
+      "diff": "AuditTrailWriter.record() now runs inside the posting transaction and waits for the compliance-archive API before commit",
       "files": [
         "LedgerPostingService.java",
-        "AccountTierClient.java",
-        "LedgerPostingServiceTest.java"
+        "AuditTrailWriter.java"
       ],
-      "lines": "+46 -9"
+      "lines": "+64 -7"
     }
   },
   "discriminators": [
