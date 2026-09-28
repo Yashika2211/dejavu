@@ -1,5 +1,6 @@
 """Incidents, their live investigations, approvals and the on-call human's feedback (spec 10)."""
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -14,6 +15,9 @@ from dejavu.api.services import STRATEGY_LABELS, Services
 from dejavu.api.sse import run_messages, stream
 from dejavu.memory.hindsight_adapter import MemoryUnavailableError
 from dejavu.runner import build_resolution
+from dejavu.sim.scenario import archetype_ids
+from dejavu.sim.telemetry import ensure_telemetry
+from dejavu.sim.world import IncidentWorld
 from dejavu.store.db import FeedbackRecord, IncidentRecord, RunRecord
 from dejavu.strategies.base import Resolution
 from dejavu.strategies.dejavu import DejaVu
@@ -73,6 +77,12 @@ def incident_summary(svc: Services, record: IncidentRecord) -> dict[str, Any]:
     }
 
 
+@router.get("/scenarios")
+def scenarios() -> dict[str, list[str]]:
+    """What the incident picker offers: the rehearsed demos, every archetype, and a surprise."""
+    return {"demos": demo_names(), "archetypes": archetype_ids()}
+
+
 @router.post("/incidents", status_code=201)
 async def create_incident(body: NewIncident, svc: Svc) -> dict[str, str]:
     return {"incident_id": create_record(svc, body.scenario, body.seed).id}
@@ -88,6 +98,15 @@ async def incident(incident_id: str, svc: Svc) -> dict[str, Any]:
     record = record_or_404(svc, incident_id)
     feedback = [f.model_dump() for f in svc.store.feedback(incident_id)]
     return {**incident_summary(svc, record), "feedback": feedback}
+
+
+@router.get("/incidents/{incident_id}/changes")
+async def changes(incident_id: str, svc: Svc, hours: float = 6.0) -> list[dict[str, Any]]:
+    """The change log before the alert, as any responder would see it on the dashboard."""
+    scenario = scenario_of(record_or_404(svc, incident_id))
+    await asyncio.to_thread(ensure_telemetry, scenario, svc.runs.telemetry_root)
+    world = IncidentWorld.open(scenario, svc.runs.telemetry_root)
+    return [c.model_dump(mode="json") for c in reversed(world.changes(min(hours, 24.0)))]
 
 
 @router.get("/incidents/{incident_id}/stream")
