@@ -16,7 +16,7 @@ import { HypothesisBoard } from "@/components/war/hypothesis-board";
 import { RemediationPanel } from "@/components/war/remediation-panel";
 import { StepCard } from "@/components/war/step-card";
 import { Badge, Button, Empty, Panel, Select } from "@/components/ui";
-import { api, ApiError, streamUrl } from "@/lib/api";
+import { api, ApiError, streamUrl, unreachable } from "@/lib/api";
 import { humanize, inr, istTime, stopwatch } from "@/lib/format";
 import { finished, remediationOutcomes } from "@/lib/run";
 import { STRATEGY_NAMES, type IncidentSummary, type Strategy } from "@/lib/types";
@@ -68,7 +68,7 @@ export default function WarRoom() {
     api
       .get<Scenarios>("/scenarios")
       .then(setScenarios)
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Could not load scenarios."));
+      .catch((e) => !unreachable(e) && setError(e instanceof ApiError ? e.message : "Could not load scenarios."));
   }, []);
 
   const start = async (fresh: boolean) => {
