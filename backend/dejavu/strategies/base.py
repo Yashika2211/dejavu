@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from dejavu.agent.schemas import AgentStep, Diagnosis
 from dejavu.documents import Document
+from dejavu.sim.generators.events import ChangeEvent
 from dejavu.taxonomy import SymptomClass
 
 # Alert names are observable, so mapping them to a symptom class leaks nothing about the cause.
@@ -71,6 +72,7 @@ class Resolution(BaseModel):
     outcome: dict[str, Any]
     documents: dict[str, Document]
     resolved_at: datetime
+    changes: list[ChangeEvent] = Field(default_factory=list)
 
 
 class MemoryStrategy(Protocol):
