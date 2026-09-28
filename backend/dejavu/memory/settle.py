@@ -3,7 +3,8 @@
 Hindsight's docs warn against retaining and recalling in the same turn; the next incident must see
 what the last one taught. After each incident: wait for the retain operations, trigger
 consolidation, then wait until nothing is pending (which also covers mental-model refreshes that
-consolidation queues). Every wait has a timeout and ends with one log line.
+consolidation queues). A failed refresh pauses a model's automatic refreshes until a manual one
+succeeds, so paused models are refreshed by hand. Every wait has a timeout and ends with one log line.
 """
 
 import asyncio
@@ -25,6 +26,7 @@ class SettleReport(BaseModel):
     failed: list[str]
     observations: int | None
     timed_out: bool
+    refreshed: list[str] = []
 
 
 async def settle(
@@ -72,12 +74,21 @@ async def settle(
             break
         await sleep(poll_s)
 
+    refreshed: list[str] = []
+    if consolidate and not timed_out:
+        refreshed = [m.id for m in await memory.mental_models(bank_id) if m.refresh_paused]
+        if refreshed:
+            log.warning("mental model refresh had failed; refreshing by hand", bank=bank_id, models=refreshed)
+            ops = [op for m in refreshed if (op := await memory.refresh_mental_model(bank_id, m))]
+            timed_out = not await wait_for(ops)
+
     report = SettleReport(
         seconds=round(clock() - start, 1),
         operations=len(operation_ids),
         failed=failed,
         observations=stats.get("total_observations"),
         timed_out=timed_out,
+        refreshed=refreshed,
     )
     log.info("memory settled", bank=bank_id, **report.model_dump())
     return report
