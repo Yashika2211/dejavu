@@ -22,6 +22,7 @@ import { motion } from "motion/react";
 import { stopwatch } from "@/lib/format";
 import type { StepView } from "@/lib/run";
 import { Badge, cx } from "../ui";
+import { OUTCOMES } from "./remediation-panel";
 
 const ICONS: Record<string, LucideIcon> = {
   get_alert: Bell,
@@ -147,9 +148,20 @@ function Result({ step }: { step: StepView }) {
   );
 }
 
-export function StepCard({ step, index, compact = false }: { step: StepView; index: number; compact?: boolean }) {
+export function StepCard({
+  step,
+  index,
+  compact = false,
+  outcome,
+}: {
+  step: StepView;
+  index: number;
+  compact?: boolean;
+  outcome?: string;
+}) {
   const Icon = ICONS[step.tool] ?? Activity;
   const memory = step.memory;
+  const effect = outcome ? OUTCOMES[outcome] : undefined;
   return (
     <motion.article
       layout
@@ -171,6 +183,11 @@ export function StepCard({ step, index, compact = false }: { step: StepView; ind
             <span className="ml-auto font-mono text-[11px] text-muted tabular-nums">+{stopwatch(step.at)}</span>
           </div>
           {step.rationale && <p className="mt-1 text-sm leading-snug">{step.rationale}</p>}
+          {effect && (
+            <Badge tone={effect.tone} className="mt-1.5">
+              {effect.label}
+            </Badge>
+          )}
         </div>
       </header>
       {memory && (
