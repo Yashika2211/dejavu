@@ -1,11 +1,11 @@
 """Agent tools: bounded, never peek into the future, and fail helpfully."""
 
 import pytest
-from conftest import POST_M2, PRE, scenario_for
 
 from dejavu.agent.tools import MAX_TOKENS, TOOLS, execute
 from dejavu.sim.scenario import archetype_ids
 from dejavu.tokens import count_tokens
+from tests.sim.cases import POST_M2, PRE, scenario_for
 
 
 def _calls(scenario) -> list[tuple[str, dict]]:
