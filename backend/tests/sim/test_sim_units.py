@@ -31,7 +31,14 @@ def test_clock_only_moves_forward() -> None:
 def test_release_calendars_hit_the_pinned_versions() -> None:
     assert version_at("ledger-svc", date(2026, 8, 17)) == "3.14.0"
     assert version_at("ledger-svc", date(2026, 9, 21)) == "3.19.0"
-    assert previous_version("ledger-svc", date(2026, 8, 17)) == "3.13.2"
+    assert (
+        previous_version("ledger-svc", date(2026, 8, 17))
+        == version_at("ledger-svc", date(2026, 8, 16))
+        == "3.13.3"
+    )
+    assert (
+        previous_version("ledger-svc", date(2026, 8, 27)) == "3.15.0"
+    )  # same version the day before: one patch back
     assert (model_version_at(date(2026, 8, 22)), model_version_at(date(2026, 9, 12))) == (47, 52)
 
 
