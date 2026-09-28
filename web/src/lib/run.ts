@@ -168,3 +168,14 @@ export function apply(run: RunView, event: TraceEvent): RunView {
 
 /** A run is over once it has been scored or has failed. */
 export const finished = (run: RunView) => run.score !== null || run.errors.length > 0;
+
+/** What each remediation step did, by step seq: the n-th proposal answers the n-th run_remediation call. */
+export function remediationOutcomes(run: RunView): Record<number, string> {
+  const steps = run.steps.filter((s) => s.tool === "run_remediation" && s.result?.ok);
+  const out: Record<number, string> = {};
+  steps.forEach((step, i) => {
+    const outcome = run.proposals[i]?.applied?.outcome;
+    if (outcome) out[step.seq] = outcome;
+  });
+  return out;
+}
