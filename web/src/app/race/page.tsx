@@ -9,7 +9,7 @@ import { useEffect, useState } from "react";
 import { Lane } from "@/components/race/lane";
 import { Scoreboard } from "@/components/race/scoreboard";
 import { Button, Panel, Select } from "@/components/ui";
-import { api, ApiError, streamUrl } from "@/lib/api";
+import { api, ApiError, streamUrl, unreachable } from "@/lib/api";
 import { STRATEGY_NAMES } from "@/lib/types";
 import { useRunStream } from "@/lib/use-stream";
 
@@ -32,7 +32,7 @@ export default function Race() {
     api
       .get<{ demos: string[] }>("/scenarios")
       .then((s) => setDemos(s.demos))
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Could not load scenarios."));
+      .catch((e) => !unreachable(e) && setError(e instanceof ApiError ? e.message : "Could not load scenarios."));
   }, []);
 
   const start = async () => {
