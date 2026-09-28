@@ -3,7 +3,7 @@
 It receives exactly what DejaVu receives, in the same order, because it inherits DejaVu's write
 path; its bank is a plain chunk store (no fact extraction, no observations, no mental models, no
 reflect). The briefing is the chunks most similar to the alert text, and `recall_memory` is the
-same similarity search over the agent's own query. No tags, no time anchoring, no synthesis.
+same similarity search over the agent's own query. No tags and no synthesis.
 """
 
 from dejavu.memory.bank_setup import Profile
@@ -28,7 +28,11 @@ class NaiveRAG(DejaVu):
 
     async def brief(self, incident: IncidentContext) -> MemoryBriefing | None:
         hits = await self.memory.recall(
-            self.bank_id, f"{incident.alert_name}. {incident.summary}", budget="low", max_tokens=1500
+            self.bank_id,
+            f"{incident.alert_name}. {incident.summary}",
+            budget="low",
+            max_tokens=1500,
+            query_timestamp=incident.alert_at,
         )
         if not hits:
             return None
@@ -41,7 +45,9 @@ class NaiveRAG(DejaVu):
         return MemoryBriefing(source="rag", text=text, data={"chunks": [h.model_dump() for h in hits]})
 
     async def lookup(self, query: str, incident: IncidentContext) -> str:
-        hits = await self.memory.recall(self.bank_id, query, budget="low", max_tokens=800)
+        hits = await self.memory.recall(
+            self.bank_id, query, budget="low", max_tokens=800, query_timestamp=incident.alert_at
+        )
         if not hits:
             return f"No passages match {query!r}."
         return fit_blocks(
