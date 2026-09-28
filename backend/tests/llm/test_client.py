@@ -1,6 +1,5 @@
 import httpx2
 import pytest
-from conftest import completion, groq_error
 
 from dejavu.llm.errors import (
     ContextTooLongError,
@@ -8,6 +7,7 @@ from dejavu.llm.errors import (
     RetriesExhaustedError,
     ToolUseFailedError,
 )
+from tests.llm.fakegroq import completion, groq_error
 
 MSG = [{"role": "user", "content": "hi"}]
 
