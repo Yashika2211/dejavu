@@ -6,21 +6,30 @@ export function cx(...classes: (string | false | null | undefined)[]): string {
   return classes.filter(Boolean).join(" ");
 }
 
+/** A titled panel. In a scrolling column it keeps its height; `fill` makes it take the remaining space. */
 export function Panel({
   title,
   actions,
   children,
   className,
   bodyClassName,
+  fill = false,
 }: {
   title: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
   bodyClassName?: string;
+  fill?: boolean;
 }) {
   return (
-    <section className={cx("flex min-h-0 flex-col rounded-md border border-border bg-panel", className)}>
+    <section
+      className={cx(
+        "flex flex-col rounded-md border border-border bg-panel",
+        fill ? "min-h-0 flex-1" : "shrink-0",
+        className,
+      )}
+    >
       <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-border px-3">
         <h2 className="text-[11px] font-medium tracking-wider text-muted uppercase">{title}</h2>
         {actions}
