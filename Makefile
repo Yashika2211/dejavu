@@ -1,4 +1,4 @@
-.PHONY: setup test lint fmt health spike sim-demo web
+.PHONY: setup test lint fmt health spike sim-demo run web
 
 BACKEND := cd backend &&
 WEB := cd web &&
@@ -25,6 +25,9 @@ spike:            ## Hindsight memory-contract spike (KEEP=1 keeps the banks)
 
 sim-demo:         ## readable oracle investigation of one incident (N=1..24, default 12)
 	$(BACKEND) uv run python scripts/sim_demo.py $(if $(N),--n $(N),)
+
+run:              ## investigate one incident with the real model (N=1..24, STRATEGY=amnesiac)
+	$(BACKEND) uv run python scripts/run_incident.py --n $(or $(N),1) --strategy $(or $(STRATEGY),amnesiac)
 
 web:              ## Next.js dev server
 	$(WEB) pnpm dev
