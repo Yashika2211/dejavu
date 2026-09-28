@@ -1,4 +1,4 @@
-.PHONY: setup test lint fmt health spike sim-demo run web
+.PHONY: setup test lint fmt health spike sim-demo run bank mini-sequence web
 
 BACKEND := cd backend &&
 WEB := cd web &&
@@ -26,8 +26,14 @@ spike:            ## Hindsight memory-contract spike (KEEP=1 keeps the banks)
 sim-demo:         ## readable oracle investigation of one incident (N=1..24, default 12)
 	$(BACKEND) uv run python scripts/sim_demo.py $(if $(N),--n $(N),)
 
-run:              ## investigate one incident with the real model (N=1..24, STRATEGY=amnesiac)
-	$(BACKEND) uv run python scripts/run_incident.py --n $(or $(N),1) --strategy $(or $(STRATEGY),amnesiac)
+run:              ## investigate one incident with the real model (N=1..24, STRATEGY=amnesiac|dejavu, BANK=)
+	$(BACKEND) uv run python scripts/run_incident.py --n $(or $(N),1) --strategy $(or $(STRATEGY),amnesiac) $(if $(BANK),--bank $(BANK),)
+
+bank:             ## set up a memory bank and import Day-0 (BANK=kestrel-ops-live, PROFILE=dejavu|rag)
+	$(BACKEND) uv run python scripts/bank_setup.py --bank $(or $(BANK),kestrel-ops-live) --profile $(or $(PROFILE),dejavu) --day0
+
+mini-sequence:    ## live Phase 3 check: incidents 1, 5, 12 with DejaVu on a throwaway bank
+	$(BACKEND) uv run python scripts/mini_sequence.py
 
 web:              ## Next.js dev server
 	$(WEB) pnpm dev
