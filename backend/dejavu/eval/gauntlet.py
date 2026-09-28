@@ -162,6 +162,7 @@ def result_row(
 
 
 def _append(path: Path, row: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as f:
         f.write(json.dumps(row) + "\n")
 
