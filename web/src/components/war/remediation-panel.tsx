@@ -8,7 +8,7 @@ import { api, ApiError } from "@/lib/api";
 import type { ProposalView } from "@/lib/run";
 import { Badge, Button, Empty, type Tone } from "../ui";
 
-const OUTCOMES: Record<string, { tone: Tone; label: string }> = {
+export const OUTCOMES: Record<string, { tone: Tone; label: string }> = {
   resolves: { tone: "ok", label: "fixed it" },
   transient: { tone: "warning", label: "brief relief, then relapse" },
   partial: { tone: "warning", label: "partial relief only" },
