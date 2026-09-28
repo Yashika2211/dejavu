@@ -202,16 +202,16 @@ class Gauntlet:
         counts = {k: v for k, v in stats.items() if isinstance(v, int | float) and not isinstance(v, bool)}
         _append(self.dir / "growth.jsonl", {"n": n, "strategy": name, **counts})
 
-    async def _snapshot(self, label: str, target: str) -> None:
-        dejavu = self.strategies.get("dejavu")
-        if not self.run.snapshots or self.memory is None or not isinstance(dejavu, DejaVu):
+    async def _snapshot(self, label: str, name: str, target: str) -> None:
+        strategy = self.strategies.get(name)
+        if not self.run.snapshots or self.memory is None or not isinstance(strategy, DejaVu):
             return
         if label in self.run.snapshots_taken:
             return
-        await snapshot(self.memory, dejavu.bank_id, target)
+        await snapshot(self.memory, strategy.bank_id, target)
         self.run.snapshots_taken.append(label)
         self.save()
-        console.print(f"snapshot {dejavu.bank_id} -> {target}")
+        console.print(f"snapshot {strategy.bank_id} -> {target}")
 
     async def prepare(self) -> None:
         """Bank setup and the Day-0 import for every memory strategy that hasn't had them.
@@ -225,7 +225,7 @@ class Gauntlet:
             report = await strategy.prepare()
             await self._growth(0, name)
             if name == "dejavu":
-                await self._snapshot("day1", self.settings.dejavu_bank_day1)
+                await self._snapshot("day1", "dejavu", self.settings.dejavu_bank_day1)
             self.run.prepared.append(name)
             self.save()
             console.print(f"{name}: bank {strategy.bank_id} ready, Day-0 imported in {report.seconds}s")
@@ -270,7 +270,8 @@ class Gauntlet:
                 )
         complete = all((n, name) in done for n, _ in plan for name in self.strategies)
         if complete and len(plan) == len(schedule):
-            await self._snapshot("trained", self.settings.dejavu_bank_trained)
+            await self._snapshot("trained", "dejavu", self.settings.dejavu_bank_trained)
+            await self._snapshot("rag", "rag", self.settings.dejavu_bank_rag)
         return complete
 
 
