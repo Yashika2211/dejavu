@@ -85,6 +85,21 @@ class ReflectAnswer(BaseModel):
     based_on: list[MemoryHit] = Field(default_factory=list)
 
 
+class MentalModelState(BaseModel):
+    """A mental model's refresh bookkeeping."""
+
+    id: str
+    name: str = ""
+    last_refreshed_at: datetime | None = None
+    last_refresh_failed_at: datetime | None = None
+
+    @property
+    def refresh_paused(self) -> bool:
+        """A failed refresh pauses automatic ones until a manual refresh succeeds."""
+        failed, ok = self.last_refresh_failed_at, self.last_refreshed_at
+        return failed is not None and (ok is None or failed > ok)
+
+
 class MemoryBackend(Protocol):
     async def configure_bank(self, bank_id: str, **config: Any) -> None: ...
 
@@ -129,7 +144,9 @@ class MemoryBackend(Protocol):
 
     async def stats(self, bank_id: str) -> dict[str, Any]: ...
 
-    async def mental_model_ids(self, bank_id: str) -> set[str]: ...
+    async def mental_models(self, bank_id: str) -> list[MentalModelState]: ...
+
+    async def refresh_mental_model(self, bank_id: str, model_id: str) -> str | None: ...
 
     async def create_mental_model(
         self,
@@ -297,11 +314,13 @@ class HindsightMemory:
     async def stats(self, bank_id: str) -> dict[str, Any]:
         return dict(await self._call(self._rest.stats(bank_id)))
 
-    async def mental_model_ids(self, bank_id: str) -> set[str]:
-        return {
-            m.get("id", "")
-            for m in _items(await self._call(self._sdk.alist_mental_models(bank_id, detail="metadata")))
-        }
+    async def mental_models(self, bank_id: str) -> list[MentalModelState]:
+        listing = await self._call(self._sdk.alist_mental_models(bank_id, detail="metadata"))
+        return [MentalModelState.model_validate(m) for m in _items(listing)]
+
+    async def refresh_mental_model(self, bank_id: str, model_id: str) -> str | None:
+        resp = _dump(await self._call(self._sdk.arefresh_mental_model(bank_id, model_id)))
+        return resp.get("operation_id") if isinstance(resp, dict) else None
 
     async def create_mental_model(
         self,
