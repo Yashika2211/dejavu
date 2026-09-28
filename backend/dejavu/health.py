@@ -61,17 +61,34 @@ async def check_groq(client: httpx.AsyncClient, settings: Settings) -> CheckResu
 
 
 async def check_hindsight(client: httpx.AsyncClient, settings: Settings) -> CheckResult:
-    """Hindsight is healthy when `/version` answers with our credentials."""
+    """Hindsight is healthy when `/version` answers and our credentials can list banks.
+
+    `/version` is public on Cloud, so on its own it says nothing about the key.
+    """
+    base = settings.hindsight_base_url.rstrip("/")
+    headers = _bearer(settings.hindsight_api_key)
     start = time.perf_counter()
     try:
-        resp = await client.get(
-            f"{settings.hindsight_base_url.rstrip('/')}/version",
-            headers=_bearer(settings.hindsight_api_key),
-        )
+        resp = await client.get(f"{base}/version", headers=headers)
         resp.raise_for_status()
     except httpx.HTTPError as exc:
         return CheckResult(name="hindsight", ok=False, detail=f"version failed: {exc!r}")
     latency = (time.perf_counter() - start) * 1000
+    try:
+        banks = await client.get(f"{base}/v1/default/banks", headers=headers, params={"limit": 1})
+    except httpx.HTTPError as exc:
+        return CheckResult(name="hindsight", ok=False, detail=f"listing banks failed: {exc!r}")
+    if banks.status_code in (401, 403):
+        missing = (
+            "HINDSIGHT_API_KEY not set"
+            if settings.hindsight_api_key is None
+            else "HINDSIGHT_API_KEY rejected"
+        )
+        return CheckResult(name="hindsight", ok=False, detail=missing, latency_ms=latency)
+    if banks.is_error:
+        return CheckResult(
+            name="hindsight", ok=False, detail=f"listing banks failed: HTTP {banks.status_code}"
+        )
     body = resp.json()
     features = body.get("features", {})
     off = sorted(k for k, v in features.items() if v is False)
