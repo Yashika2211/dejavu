@@ -282,6 +282,7 @@ class Investigator:
             cited_incidents=cited,
             model=decision.model,
             repaired=decision.repaired,
+            outcome=result.data.get("outcome"),
         )
         if counts:
             state.steps.append(step)
@@ -443,6 +444,7 @@ class Investigator:
                     output=result.output,
                     sim_minutes=result.sim_minutes,
                     at_min=round(at, 2),
+                    outcome=result.data.get("outcome"),
                 )
             )
         return steps
