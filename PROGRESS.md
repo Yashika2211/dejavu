@@ -62,7 +62,7 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] Read path (`memory/reader.py`): triage brief (observations + reflect with `TriageBrief` schema and `based_on`, retry, fallback), `recall_memory` lookups
 - [x] DejaVu strategy (`strategies/dejavu.py`) and calendar-order sequence runner (`eval/sequence.py`)
 - [x] NaiveRAG ablation (`strategies/rag.py`) inheriting DejaVu's write path
-- [x] **DoD (offline):** bank setup idempotent, Day-0 import, write path, settle, briefing + provenance, lookups, degraded mode, three-incident mini-sequence plumbing (all with a fake memory; 445 tests pass)
+- [x] **DoD (offline):** bank setup idempotent, Day-0 import, write path, settle, briefing + provenance, lookups, degraded mode, three-incident mini-sequence plumbing (all with a fake memory; 444 tests pass, 4 live skipped)
 - [ ] **DoD (live, blocked on both keys):** `make mini-sequence` (incidents 1 → 5 → 12 on a throwaway bank) shows memory moments and temporal validity; mental models refreshing; live mini-sequence test
 
 ## Phase 4: the Gauntlet
