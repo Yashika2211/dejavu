@@ -119,7 +119,7 @@ export default function WarRoom() {
           <div className="ml-auto flex items-center gap-6">
             <Badge tone={status.tone}>{status.label}</Badge>
             <Clock alertAt={incident.alert_at} minutes={run?.clock.at ?? 0} />
-            <Rupees amount={run?.resolved?.inr ?? run?.clock.inr ?? 0} />
+            <Rupees amount={run?.clock.inr ?? 0} />
           </div>
         )}
       </div>
