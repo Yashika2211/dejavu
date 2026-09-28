@@ -1,7 +1,9 @@
 import pytest
 
 from dejavu.config import Settings
+from dejavu.llm.errors import LLMError
 from dejavu.llm.models import usable_models
+from dejavu.runner import build_caller
 
 
 def _models(*ids: str) -> dict:
@@ -25,3 +27,8 @@ async def test_no_usable_model_is_an_error(make_client, groq) -> None:
     groq.add(_models("something/else"))
     with pytest.raises(RuntimeError, match="none of the configured models"):
         await usable_models(client, Settings(_env_file=None))
+
+
+async def test_a_missing_key_is_named_before_any_request() -> None:
+    with pytest.raises(LLMError, match="GROQ_API_KEY is not set"):
+        await build_caller(Settings(_env_file=None))
