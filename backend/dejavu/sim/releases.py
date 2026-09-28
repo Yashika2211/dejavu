@@ -7,7 +7,7 @@ on 22 Aug, v52 on 12 Sep) fall out naturally.
 
 import math
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from dejavu.sim.clock import IST
 
@@ -49,11 +49,29 @@ def version_at(service: str, when: datetime | date) -> str:
 
 
 def previous_version(service: str, when: datetime | date) -> str:
-    """The last minor release before the one current on `when`'s day."""
-    cad = CADENCES[service]
-    days = _days(when, cad.anchor)
-    minor = cad.minor_at_anchor + math.floor(days / cad.days_per_minor) - 1
-    return f"{cad.major}.{minor}.{int(cad.days_per_minor // 2) // 2 + 1}"
+    """The version that was live the day before (one patch earlier if it did not change)."""
+    day = when.astimezone(IST).date() if isinstance(when, datetime) else when
+    current, before = version_at(service, day), version_at(service, day - timedelta(days=1))
+    if before != current:
+        return before
+    major, minor, patch = (int(x) for x in current.split("."))
+    return f"{major}.{minor}.{patch - 1}" if patch else f"{major}.{minor - 1}.3"
+
+
+PR_BASE = {
+    "auth-svc": 812,
+    "checkout-api": 3410,
+    "payments-svc": 1520,
+    "ledger-svc": 2150,
+    "fraud-scorer": 614,
+    "notifications-worker": 896,
+}
+
+
+def pr_number(service: str, when: datetime, salt: int = 0) -> int:
+    """Pull request numbers grow with the calendar (about three merged PRs a day per repo)."""
+    days = (when.astimezone(IST).date() - date(2026, 8, 1)).days
+    return PR_BASE[service] + 3 * days + (when.astimezone(IST).hour + salt) % 3
 
 
 def model_version_at(when: datetime | date) -> int:
