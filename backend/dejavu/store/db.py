@@ -86,10 +86,12 @@ class Store:
     def _session(self) -> Session:
         return Session(self.engine, expire_on_commit=False)
 
-    def save(self, record: SQLModel) -> None:
+    def save[R: SQLModel](self, record: R) -> R:
+        """Insert or update; returns the stored record (with its generated id, if any)."""
         with self._session() as session:
-            session.merge(record)
+            stored = session.merge(record)
             session.commit()
+            return stored
 
     def incident(self, incident_id: str) -> IncidentRecord | None:
         with self._session() as session:
