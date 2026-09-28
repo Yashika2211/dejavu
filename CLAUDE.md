@@ -13,11 +13,17 @@ DejaVu is an on-call SRE agent for the fictional fintech Kestrel Pay. It learns 
 ## Commands
 
 ```
-make setup     # uv sync + pnpm install
-make test      # ruff + pytest (live tests skipped without keys)
-make health    # Groq model list + Hindsight version
-make spike     # Hindsight memory-contract spike against the real server
-make dev       # api + web
+make setup          # uv sync + pnpm install
+make test           # ruff + pytest + web lint (live tests skipped without keys)
+make health         # Groq model list + Hindsight version and credentials
+make spike          # Hindsight memory-contract spike against the real server
+make bank           # set up a memory bank and import Day-0 (BANK=, PROFILE=dejavu|rag)
+make mini-sequence  # live Phase 3 check: incidents 1, 5, 12 on a throwaway bank
+make run            # one incident with the real model (N=, STRATEGY=, BANK=)
+make gauntlet       # the Gauntlet (STRATEGIES=, N=, SEED=, RESUME=1, DRY=1, SNAPSHOTS=1)
+make report         # summary + charts for a run (RUN=, PUBLISH=1 rewrites docs/EVAL_RESULTS.md)
+make api            # FastAPI on :8000
+make dev            # api + web
 ```
 
 ## Rules
