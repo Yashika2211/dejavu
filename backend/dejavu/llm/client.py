@@ -1,8 +1,9 @@
 """Groq chat completions through the OpenAI SDK, with our own retry policy and call accounting.
 
 The SDK's built-in retries are off (`max_retries=0`); this client decides what to retry:
-429s honour `retry-after` (and pause the model's rate limiter), 5xx and connection errors back off
-exponentially with jitter. Errors only the caller can fix are raised as typed exceptions:
+429s honour `retry-after` (and pause the model's rate limiter) unless it is beyond `max_wait_s`,
+as with a daily cap, which raises `QuotaExhaustedError` instead of sleeping for hours. 5xx and
+connection errors back off exponentially with jitter. Errors only the caller can fix are raised as typed exceptions:
 tool_use_failed (repair or re-prompt), 413 / context length (trim), unknown model (fall back).
 Every call, successful or not, is reported to `on_call` for the run trace.
 """
@@ -30,6 +31,7 @@ from dejavu.llm.errors import (
     ContextTooLongError,
     LLMError,
     ModelUnavailableError,
+    QuotaExhaustedError,
     RetriesExhaustedError,
     ToolUseFailedError,
 )
@@ -110,6 +112,7 @@ class LLMClient:
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         on_call: Callable[[CallRecord], None] | None = None,
         max_attempts: int = 6,
+        max_wait_s: float = 120.0,
         rng: random.Random | None = None,
     ) -> None:
         api_key = settings.groq_api_key.get_secret_value() if settings.groq_api_key else "missing"
@@ -127,6 +130,7 @@ class LLMClient:
         self._sleep = sleep
         self._on_call = on_call or (lambda _record: None)
         self._max_attempts = max_attempts
+        self._max_wait_s = max_wait_s
         self._rng = rng or random.Random()
         self.calls: list[CallRecord] = []  # every call, for per-run accounting
 
@@ -203,6 +207,9 @@ class LLMClient:
                 resp = await self._openai.chat.completions.create(**kwargs)
             except RateLimitError as exc:
                 wait = _retry_after(exc.response) or self._backoff(state.retries)
+                if wait > self._max_wait_s:
+                    self._record(model, purpose, retries=state.retries, error=f"429 retry-after {wait:g}s")
+                    raise QuotaExhaustedError(model, wait) from exc
                 limiter.pause(wait)
                 await self._retry_or_raise(model, purpose, state, f"429 retry-after {wait:g}s")
                 continue
