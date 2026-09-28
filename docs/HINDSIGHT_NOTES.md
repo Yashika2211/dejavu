@@ -13,6 +13,7 @@ What we verified about Hindsight before building on it, and what surprised us. V
 | Graph, entities, bank stats, consolidate | No SDK methods | REST: `/graph`, `/entities`, `/stats`, `POST /consolidate` |
 | Reflect `based_on` kwarg name unknown | `areflect(include_facts=True)` → `based_on = {memories, mental_models, directives}` | Always pass `include_facts=True` for provenance |
 | Reflect default budget | SDK default is `low` (recall defaults to `mid`) | Pass `budget` explicitly everywhere |
+| `query_timestamp` on recall and reflect | Recall has it; reflect has none (SDK and `ReflectRequest`) | Triage and Ask queries state the simulated time in their text ("It is 19:42 IST on Mon 24 Aug 2026"). Banks never hold documents from after the incident, so reflect anchoring to real time can't leak the future |
 | Knowledge pages "if available" | Available: folders + pages, each page backed by a mental model | Use them for living runbooks |
 | Clone returns a bank | `aclone_bank(src, target, include_data, include_bank_config, include_history)` returns an **operation id** (HTTP 202). The target must not exist | Poll the operation before using the clone |
 | Export | `aexport_bank` polls internally and returns the archive `bytes` | Direct |
