@@ -140,16 +140,19 @@ export function apply(run: RunView, event: TraceEvent): RunView {
         ),
       };
     case "remediation_applied": {
+      const clock = { ...run.clock, at: Math.max(run.clock.at, event.at_min) };
       const index = run.proposals.findLastIndex((p) => p.action === d.action && p.target === d.target && !p.applied);
-      if (index < 0) return run;
+      if (index < 0) return { ...run, clock };
       const proposals = run.proposals.slice();
       proposals[index] = { ...proposals[index], applied: { outcome: str(d.outcome), at: event.at_min } };
-      return { ...run, proposals };
+      return { ...run, proposals, clock };
     }
     case "diagnosis":
       return { ...run, diagnosis: d as unknown as Diagnosis };
-    case "resolved":
-      return { ...run, resolved: { at: event.at_min, inr: Number(d.inr_at_risk ?? 0) } };
+    case "resolved": {
+      const inr = Number(d.inr_at_risk ?? 0);
+      return { ...run, resolved: { at: event.at_min, inr }, clock: { at: Math.max(run.clock.at, event.at_min), inr } };
+    }
     case "clock":
       return { ...run, clock: { at: event.at_min, inr: Number(d.inr_at_risk ?? run.clock.inr) } };
     case "scored":
