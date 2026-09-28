@@ -15,7 +15,7 @@ variants:
   payments_p99_add: {randint: [3400, 5200]}
   checkout_p99_add: {randint: [3500, 5400]}
   failure_share: {uniform: [0.18, 0.30]}
-  herring_pr: {randint: [3440, 3520]}
+  herring_title: {choice: [Copy change on UPI intent screen (i18n), Add Tamil and Telugu strings to the checkout page, Tweak the retry banner copy on payment failure]}
 
 alert:
   name: CheckoutLatencyP99High
@@ -46,8 +46,8 @@ effects:
       details:
         version: "{{version_checkout_api}}"
         prev_version: "{{prev_version_checkout_api}}"
-        pr: "{{herring_pr}}"
-        pr_title: Copy change on UPI intent screen (i18n)
+        pr: "{{pr_checkout_api}}"
+        pr_title: "{{herring_title}}"
         files: [locales/en.json, locales/hi.json]
         lines: "+6 -6"
 
