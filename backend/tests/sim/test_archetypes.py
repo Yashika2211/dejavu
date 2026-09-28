@@ -4,7 +4,6 @@ import json
 
 import pyarrow.parquet as pq
 import pytest
-from conftest import CASES, scenario_for
 
 from dejavu.agent.tools import execute
 from dejavu.sim.checks import check_discriminators
@@ -12,6 +11,7 @@ from dejavu.sim.generators.alerts import alert_value
 from dejavu.sim.generators.metrics import generate_metrics
 from dejavu.sim.scenario import archetype_ids
 from dejavu.taxonomy import RootCause
+from tests.sim.cases import CASES, scenario_for
 
 NOVEL = {"sms_quota_exhausted", "az_network_partition", "jwks_rotation_mismatch"}
 
