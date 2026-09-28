@@ -14,7 +14,10 @@ variants:
   ledger_p99_add: {randint: [19000, 26000]}
   checkout_p99_add: {randint: [5600, 7200]}
   failure_share: {uniform: [0.22, 0.34]}
-  pr: {randint: [2180, 2260]}
+  pr_title: {choice: [Enrich ledger postings with account tier]}
+  diff: {choice: ["LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block"]}
+  files: {choice: [[LedgerPostingService.java, AccountTierClient.java, LedgerPostingServiceTest.java]]}
+  lines: {choice: ["+46 -9"]}
   author: {choice: [Farhan Qureshi, Ananya Iyer]}
 
 alert:
@@ -46,10 +49,10 @@ effects:
         version: "{{version}}"
         prev_version: "{{prev_version}}"
         pr: "{{pr}}"
-        pr_title: Enrich ledger postings with account tier
-        diff: LedgerPostingService.post() now calls AccountTierClient.fetchTier(accountId) for each entry inside the @Transactional block
-        files: [LedgerPostingService.java, AccountTierClient.java, LedgerPostingServiceTest.java]
-        lines: "+46 -9"
+        pr_title: "{{pr_title}}"
+        diff: "{{diff}}"
+        files: "{{files}}"
+        lines: "{{lines}}"
 
   # connections are held for the whole transaction, so the pool pins at its maximum
   - metric_shift: {service: ledger-svc, metric: db_pool_active, shape: ramp, mode: set, magnitude: "{{pool_max}}", start_offset: "{{onset}}", ramp_minutes: 3, noise: 0}
