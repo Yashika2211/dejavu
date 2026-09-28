@@ -45,6 +45,35 @@ function argText(args: Record<string, unknown>): string {
     .join(" · ");
 }
 
+const LEVELS = "▁▂▃▄▅▆▇█";
+
+/** The tool's block-character sparkline, drawn as bars (one per 2.5-minute bucket). */
+function Bars({ blocks }: { blocks: string }) {
+  const heights = [...blocks].map((c) => LEVELS.indexOf(c)).filter((level) => level >= 0);
+  const width = 4;
+  return (
+    <svg
+      role="img"
+      aria-label="metric over the last hour"
+      width={heights.length * (width + 1)}
+      height={24}
+      className="text-muted"
+    >
+      {heights.map((level, i) => (
+        <rect
+          key={i}
+          x={i * (width + 1)}
+          y={24 - 3 * (level + 1)}
+          width={width}
+          height={3 * (level + 1)}
+          rx={1}
+          className={level >= 5 ? "fill-warning" : "fill-current"}
+        />
+      ))}
+    </svg>
+  );
+}
+
 function Sparkline({ output }: { output: string }) {
   const lines = output.split("\n");
   const spark = lines.find((l) => /[▁▂▃▄▅▆▇█]{4,}/.test(l));
@@ -52,7 +81,8 @@ function Sparkline({ output }: { output: string }) {
   const change = lines.find((l) => l.startsWith("change point"));
   return (
     <div className="space-y-1">
-      {spark && <p className="font-mono text-base leading-none tracking-tight text-text">{spark.split("  ")[0]}</p>}
+      <p className="font-mono text-[11px] text-muted">{lines[0]}</p>
+      {spark && <Bars blocks={spark.split("  ")[0]} />}
       {now && <p className="font-mono text-[11px] text-muted">{now}</p>}
       {change && <p className="font-mono text-[11px] text-warning">{change}</p>}
     </div>
