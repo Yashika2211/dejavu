@@ -1,0 +1,35 @@
+# Changes waiting to ship on the demo day (spec 8). Each risky one is the trigger change of a latent
+# incident: the incident that happens if it ships without a safeguard. The reviewer only ever sees the
+# change itself. Latent incidents take ticket numbers after the live war room's range.
+pending:
+  - id: pending-ledger-loyalty
+    latent:
+      archetype: db_pool_exhaustion
+      incident_id: INC-4611
+      seed: 3101
+      alert_at: "2026-09-28T11:40"
+      overrides:
+        version: "3.20.0"
+        prev_version: "3.19.2"
+        pr_title: Award loyalty points at posting time
+        diff: "LedgerPostingService.post() now calls LoyaltyClient.award(accountId, amount) for each entry inside the @Transactional block"
+        files: [LedgerPostingService.java, LoyaltyClient.java, LoyaltyClientTest.java]
+        lines: "+88 -14"
+  - id: pending-retry-flag
+    latent: {archetype: retry_storm, incident_id: INC-4617, seed: 3102, alert_at: "2026-09-28T19:15", overrides: {flag_author: Tomás Ortega}}
+  - id: pending-fraud-model
+    latent: {archetype: memory_leak_oom, incident_id: INC-4622, seed: 3103, alert_at: "2026-09-28T15:30", overrides: {model_version: 53, prev_model_version: 52}}
+  - id: pending-payments-limits
+    latent: {archetype: cpu_throttling, incident_id: INC-4630, seed: 3104, alert_at: "2026-09-29T10:20", overrides: {ticket: 247}}
+  - id: pending-refund-sms
+    change:
+      type: deploy
+      service: notifications-worker
+      author: Kofi Mensah
+      at: "2026-09-28T12:00"
+      summary: "notifications-worker 2.14.1 -> 2.14.2"
+      details:
+        pr_title: Clearer refund SMS wording
+        diff: "templates/refund_sms.txt: wording only, no code changes"
+        files: [templates/refund_sms.txt]
+        lines: "+3 -3"
