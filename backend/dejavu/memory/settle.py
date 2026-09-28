@@ -34,9 +34,11 @@ async def settle(
     *,
     timeout_s: float = 900.0,
     poll_s: float = 2.0,
+    consolidate: bool = True,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     clock: Callable[[], float] = time.monotonic,
 ) -> SettleReport:
+    """Wait for `operation_ids`, then (with `consolidate`) for a consolidation pass and its fallout."""
     start = clock()
     deadline = start + timeout_s
     failed: list[str] = []
@@ -59,7 +61,7 @@ async def settle(
 
     timed_out = not await wait_for(operation_ids)
     stats: dict = {}
-    if not timed_out:
+    if consolidate and not timed_out:
         timed_out = not await wait_for([await memory.consolidate(bank_id)])
     while not timed_out:
         stats = await memory.stats(bank_id)
