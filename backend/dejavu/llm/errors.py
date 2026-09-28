@@ -26,3 +26,11 @@ class ModelUnavailableError(LLMError):
 
 class RetriesExhaustedError(LLMError):
     """Rate limits or server errors outlasted the retry budget."""
+
+
+class QuotaExhaustedError(RetriesExhaustedError):
+    """A rate limit that resets too far ahead to wait for, such as a daily token cap."""
+
+    def __init__(self, model: str, wait_s: float) -> None:
+        super().__init__(f"{model}: rate limited for {wait_s:g}s")
+        self.wait_s = wait_s
