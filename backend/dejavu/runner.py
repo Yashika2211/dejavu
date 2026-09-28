@@ -4,12 +4,14 @@ The CLI (`scripts/run_incident.py`), the Gauntlet and the API all go through her
 is produced and scored the same way.
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 from dejavu.agent.loop import Approver, Investigator, LoopConfig, RunResult, auto_approve
 from dejavu.agent.trace import RUNS_DIR, Trace
 from dejavu.config import Settings
-from dejavu.eval.grading import HISTORICAL_CATEGORIES, IncidentScore, grade
+from dejavu.documents import Document
+from dejavu.eval.grading import DETECTION_MIN, HISTORICAL_CATEGORIES, IncidentScore, grade
 from dejavu.llm.client import LLMClient
 from dejavu.llm.models import usable_models
 from dejavu.llm.toolcalling import ToolCaller
@@ -17,7 +19,7 @@ from dejavu.sim.scenario import Scenario
 from dejavu.sim.schedule import gauntlet
 from dejavu.sim.telemetry import INCIDENTS_DIR
 from dejavu.sim.world import IncidentWorld
-from dejavu.strategies.base import MemoryStrategy
+from dejavu.strategies.base import IncidentContext, MemoryStrategy, Resolution
 from dejavu.taxonomy import RootCause
 
 
@@ -57,3 +59,19 @@ async def run_incident(
     )
     result = await investigator.run(world)
     return result, grade(result, scenario, world, known_categories()), world
+
+
+def build_resolution(
+    run: RunResult, score: IncidentScore, world: IncidentWorld, documents: dict[str, Document]
+) -> Resolution:
+    """What the team knows once the incident is over: the run, its outcome and their write-ups."""
+    alert_at = world.scenario.alert_at
+    return Resolution(
+        incident=IncidentContext.from_alert(world.scenario.incident_id, world.store.alert, alert_at),
+        diagnosis=run.diagnosis,
+        steps=run.steps,
+        outcome=score.model_dump(mode="json"),
+        documents=documents,
+        resolved_at=alert_at + timedelta(minutes=score.mttr_min - DETECTION_MIN),
+        changes=world.changes(6),
+    )
