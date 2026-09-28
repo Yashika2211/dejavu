@@ -1,4 +1,4 @@
-.PHONY: setup test lint fmt health spike sim-demo run bank mini-sequence gauntlet gauntlet-quick report web
+.PHONY: setup test lint fmt health spike sim-demo run bank mini-sequence gauntlet gauntlet-quick report api dev web
 
 BACKEND := cd backend &&
 ALL_STRATEGIES := amnesiac,rag,dejavu
@@ -44,6 +44,12 @@ gauntlet-quick:   ## quick mode: the first 6 incidents, amnesiac and dejavu
 
 report:           ## charts and summary for a run (RUN=<run id>, default the latest; PUBLISH=1 rewrites docs/EVAL_RESULTS.md)
 	$(BACKEND) uv run python -m dejavu.eval.report $(if $(RUN),--run-id $(RUN),) $(if $(PUBLISH),--publish,)
+
+api:              ## FastAPI with reload on API_PORT (default 8000)
+	$(BACKEND) uv run uvicorn dejavu.api.main:app --reload --port $(or $(API_PORT),8000)
+
+dev:              ## api and web together
+	$(MAKE) -j2 api web
 
 web:              ## Next.js dev server
 	$(WEB) pnpm dev
