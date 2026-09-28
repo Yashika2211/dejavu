@@ -14,7 +14,7 @@ format: md
 **Date:** Mon 17 Aug 2026 · **Severity:** SEV-2 · **On call:** Priya Raman · **Author:** Farhan Qureshi
 
 ## Summary
-From 02:58 to 03:31 IST checkout-api p99 on POST /v1/checkout sat above 6 s. ledger-svc 3.14.0 (deployed 02:54, chg-c3e375) calls `AccountTierClient.fetchTier()` for every entry inside the `@Transactional` posting block, so each request held a HikariCP connection for seconds. The pool pinned at 20 active per pod with 100+ threads waiting; postgres-ledger CPU stayed normal. Rolling back to 3.13.2 fixed it.
+From 02:58 to 03:31 IST checkout-api p99 on POST /v1/checkout sat above 6 s. ledger-svc 3.14.0 (deployed 02:54, chg-c3e375) calls `AccountTierClient.fetchTier()` for every entry inside the `@Transactional` posting block, so each request held a HikariCP connection for seconds. The pool pinned at 20 active per pod with 100+ threads waiting; postgres-ledger CPU stayed normal. Rolling back to 3.13.3 fixed it.
 
 ## Impact
 - 33 minutes of degraded checkout (02:58-03:31), low overnight traffic.
@@ -27,11 +27,11 @@ Connection pool exhaustion in ledger-svc caused by longer transactions in 3.14.0
 CheckoutLatencyP99High paged at 03:07 (p99 6,672 ms). Priya acknowledged at 03:09.
 
 ## Timeline (IST)
-- 02:54 ledger-svc 3.13.2 -> 3.14.0 deployed
+- 02:54 ledger-svc 3.13.3 -> 3.14.0 deployed
 - 02:58 HikariCP `Connection is not available ... waiting=` warnings begin
 - 03:07 alert fires
 - 03:13 Priya restarts ledger-svc pods: three minutes of relief, then latency returns
-- 03:21 Farhan joins and rolls back to 3.13.2 (6 minutes)
+- 03:21 Farhan joins and rolls back to 3.13.3 (6 minutes)
 - 03:31 p99 back under 600 ms
 
 ## What went well
