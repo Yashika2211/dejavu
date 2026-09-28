@@ -19,3 +19,15 @@ One line each: decision, then why.
 - Incident ticket numbers come from the calendar, not the run seed, so fixtures can cite them (e.g. "the INC-4127 pattern") across seeds. Details that vary with the seed, such as the skewed node's name, are exact only for seed 42.
 - Default token prices: gpt-oss-120b $0.15/$0.60 per 1M tokens (from the spec); gpt-oss-20b $0.075/$0.30 and qwen3.8-27b $0.29/$0.59 are estimates. Reports label costs as estimates, and `LLM_PRICES` overrides them.
 - Day-0 PDFs go through `retain_files` as the spec asks. Its `files_metadata` has no documented timestamp and `PATCH /documents` only updates tags, so those two documents may be dated at upload time. Their text carries explicit dates for temporal extraction, and the spike checks whether an undocumented `timestamp` is honoured.
+- Triage reflect states the incident time in its query, because reflect has no `query_timestamp` (0.10.1). Banks never hold documents from after the incident, so nothing leaks.
+- The change log is retained per incident (`changes-INC-xxxx`, the six hours before the alert) rather than as daily batches. Each incident gets the changes that matter to it as one document.
+- NaiveRAG subclasses DejaVu and overrides only the read path. Inheriting the write path guarantees the same documents in the same order (spec 6.8).
+- The RAG bank uses Hindsight's chunk mode until the spike's chunk-mode check says otherwise; if it fails, RAG moves to a local embedding store as spec 6.8 allows.
+- A 429 whose retry-after exceeds 120 s raises `QuotaExhaustedError` instead of sleeping. Waiting out a daily cap inside one request would stall a run for hours.
+- The Gauntlet pins the primary model with no fallbacks; a daily cap stops the run for `--resume`. Switching models mid-run would confound the strategy comparison.
+- Gauntlet strategies take turns incident by incident, so a stopped run leaves every strategy at the same point and partial results stay comparable.
+- A run that ends in an LLM error is not graded, and memory learns nothing from it; it is retried on resume. It measures the API, not the agent.
+- Gauntlet traces go to `data/runs/<run-id>/` (gitignored, reproducible); results, summaries and charts go to `data/eval/<run-id>/` (committed, the record).
+- `docs/EVAL_RESULTS.md` is only written by `report --publish` from a chosen run, so quick and partial runs never overwrite published results.
+- Snapshot banks are written only with `--snapshots`. Day1 is cloned straight after the Day-0 import, before the bank counts as prepared, so it can never contain an incident.
+- Incident kinds (first, recurrence, look-alike, novel) come from the schedule's notes and order, so the per-kind breakdown has a single definition.
