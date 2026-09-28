@@ -75,7 +75,7 @@ def mental_model_specs() -> list[MentalModelSpec]:
 
 async def ensure_mental_models(memory: MemoryBackend, bank_id: str) -> list[str]:
     """Create the models the bank does not have yet; returns the creation operation ids."""
-    existing = await memory.mental_model_ids(bank_id)
+    existing = {m.id for m in await memory.mental_models(bank_id)}
     ops = []
     for spec in mental_model_specs():
         if spec.id in existing:
