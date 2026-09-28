@@ -4,6 +4,7 @@ import pytest
 from dejavu.llm.errors import (
     ContextTooLongError,
     ModelUnavailableError,
+    QuotaExhaustedError,
     RetriesExhaustedError,
     ToolUseFailedError,
 )
@@ -38,6 +39,22 @@ async def test_rate_limit_honours_retry_after(make_client, groq, records) -> Non
     assert resp.retries == 1
     assert 7 in waits.slept  # the limiter paused the model for the server's retry-after
     assert records[0].error == "429 retry-after 7s"
+
+
+async def test_a_daily_cap_is_raised_instead_of_waited_out(make_client, groq, records) -> None:
+    client, waits = make_client()
+    groq.add(
+        httpx2.Response(
+            429,
+            headers={"retry-after": "5400"},
+            json={"error": {"message": "tokens per day exceeded", "code": "rate_limit_exceeded"}},
+        )
+    )
+    with pytest.raises(QuotaExhaustedError) as info:
+        await client.complete(model="openai/gpt-oss-120b", messages=MSG)
+    assert info.value.wait_s == 5400
+    assert waits.slept == []
+    assert records[-1].error == "429 retry-after 5400s"
 
 
 @pytest.mark.parametrize("status", [500, 502, 503])
