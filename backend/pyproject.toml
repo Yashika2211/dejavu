@@ -8,6 +8,7 @@ dependencies = [
     "fpdf2>=2.8",
     "hindsight-client>=0.10.1",
     "httpx>=0.28",
+    "matplotlib>=3.9",
     "numpy>=2.1",
     "openai>=1.60",
     "pyarrow>=18",
