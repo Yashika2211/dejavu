@@ -14,10 +14,12 @@ from dejavu.memory.settle import SettleReport, settle
 from dejavu.memory.writer import day0_payloads
 
 
-async def import_day0(memory: MemoryBackend, bank_id: str, *, timeout_s: float = 1200.0) -> SettleReport:
+async def import_day0(
+    memory: MemoryBackend, bank_id: str, *, timeout_s: float = 1200.0, consolidate: bool = True
+) -> SettleReport:
     with tempfile.TemporaryDirectory() as tmp:
         items, files = day0_payloads(list(day0_documents()), Path(tmp))
         ops = await memory.retain(bank_id, items)
         if files:
             ops += await memory.retain_files(bank_id, files)
-    return await settle(memory, bank_id, ops, timeout_s=timeout_s)
+    return await settle(memory, bank_id, ops, timeout_s=timeout_s, consolidate=consolidate)
