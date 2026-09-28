@@ -1,8 +1,11 @@
 """Bank setup is idempotent; settling waits for retains, consolidation and pending work."""
 
+from datetime import UTC, datetime
+
 import pytest
 
 from dejavu.memory.bank_setup import setup_bank
+from dejavu.memory.hindsight_adapter import MentalModelState
 from dejavu.memory.mental_models import CORE_SERVICES, mental_model_specs
 from dejavu.memory.missions import DIRECTIVES, RETAIN_MISSION
 from dejavu.memory.settle import settle
@@ -70,3 +73,21 @@ async def test_settle_gives_up_at_the_timeout() -> None:
     ops = await memory.retain("b", [])
     report = await settle(memory, "b", ops, timeout_s=10, poll_s=2, sleep=time.sleep, clock=time.clock)
     assert report.timed_out
+
+
+async def test_settle_restarts_paused_mental_model_refreshes() -> None:
+    memory = FakeMemory()
+    await setup_bank(memory, "b", "dejavu")
+    memory.failed_refresh["b"].add("triage-playbook")
+    time = NoWait()
+    report = await settle(memory, "b", [], sleep=time.sleep, clock=time.clock)
+    assert report.refreshed == ["triage-playbook"]
+    assert not any(m.refresh_paused for m in await memory.mental_models("b"))
+
+
+def test_a_refresh_is_paused_only_while_the_last_attempt_failed() -> None:
+    aug, sep = datetime(2026, 8, 30, tzinfo=UTC), datetime(2026, 9, 2, tzinfo=UTC)
+    assert MentalModelState(id="m", last_refreshed_at=aug, last_refresh_failed_at=sep).refresh_paused
+    assert MentalModelState(id="m", last_refresh_failed_at=sep).refresh_paused
+    assert not MentalModelState(id="m", last_refreshed_at=sep, last_refresh_failed_at=aug).refresh_paused
+    assert not MentalModelState(id="m", last_refreshed_at=sep).refresh_paused
