@@ -85,3 +85,35 @@ class AgentStep(BaseModel):
     outcome: str | None = Field(
         None, description="For run_remediation: what the action did (resolves, no_effect, ...)"
     )
+
+
+class LikelyCause(BaseModel):
+    cause: str
+    service: str
+    prior: float = Field(ge=0, le=1)
+    why: str
+    precedent_incident_ids: list[str] = Field(default_factory=list)
+    last_seen: str | None = None
+    still_valid: Literal["yes", "no", "unknown"] = "unknown"
+    validity_note: str = ""
+
+
+class FirstCheck(BaseModel):
+    check: str
+    reason: str
+
+
+class AvoidAction(BaseModel):
+    action: str
+    reason: str
+    precedent_incident_ids: list[str] = Field(default_factory=list)
+
+
+class TriageBrief(BaseModel):
+    """What memory suggests before the first tool call: priors, cheap discriminating checks, what not to do."""
+
+    likely_causes: list[LikelyCause] = Field(default_factory=list)
+    first_checks: list[FirstCheck] = Field(default_factory=list)
+    avoid: list[AvoidAction] = Field(default_factory=list)
+    stale_knowledge_warnings: list[str] = Field(default_factory=list)
+    novel_signals: list[str] = Field(default_factory=list)
