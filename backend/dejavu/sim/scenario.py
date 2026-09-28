@@ -386,8 +386,11 @@ def load_archetype(archetype_id: str) -> dict[str, Any]:
     return yaml.safe_load(path.read_text())
 
 
+NOT_ARCHETYPES = frozenset({"schedule", "pending"})  # the calendar files that live beside the archetypes
+
+
 def archetype_ids() -> list[str]:
-    return sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml") if p.stem != "schedule")
+    return sorted(p.stem for p in SCENARIO_DIR.glob("*.yaml") if p.stem not in NOT_ARCHETYPES)
 
 
 def _pods(topology: Topology, seed: int, incident_id: str) -> tuple[dict, dict, dict]:
