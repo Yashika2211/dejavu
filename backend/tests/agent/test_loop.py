@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from dejavu.agent.loop import Investigator, LoopConfig, system_prompt
+from dejavu.agent.loop import Investigator, LoopConfig, Proposal, system_prompt
 from dejavu.agent.trace import Trace
 from dejavu.llm.toolcalling import ToolCaller
 from dejavu.sim.fake_secrets import fake_jwt
@@ -217,3 +217,38 @@ def test_system_prompt_lists_the_taxonomy_and_rules() -> None:
     assert "novel" in prompt
     assert "untrusted" in prompt
     assert "{" not in prompt.replace("<tool_output", "")
+
+
+async def test_the_approver_sees_each_proposal_and_can_decline(
+    make_client, groq, open_world, tmp_path
+) -> None:
+    seen: list[Proposal] = []
+
+    async def decline(proposal: Proposal) -> bool:
+        seen.append(proposal)
+        return False
+
+    client, _ = make_client()
+    agent = Investigator(
+        ToolCaller(client, [MODEL]),
+        Amnesiac(),
+        approver=decline,
+        trace=Trace("t", directory=tmp_path),
+        run_id="t",
+    )
+    groq.add(
+        call("run_remediation", "roll back the deploy", action="rollback", target="ledger-svc"),
+        diagnosis("db_pool_exhaustion", "ledger-svc", plan=[{"action": "rollback", "target": "ledger-svc"}]),
+    )
+    world = open_world(scenario_for("db_pool_exhaustion", PRE))
+    result = await agent.run(world)
+
+    assert [(p.action_id, p.action.value, p.target) for p in seen] == [
+        ("r1", "rollback", "ledger-svc"),
+        ("r2", "rollback", "ledger-svc"),
+    ]
+    assert "declined by the on-call human" in result.steps[0].output
+    assert world.interventions == []
+    proposed = agent.trace.of_type("remediation_proposed")
+    assert [e.data["action_id"] for e in proposed] == ["r1", "r2"]
+    assert proposed[0].data["needs_approval"] == seen[0].needs_approval
