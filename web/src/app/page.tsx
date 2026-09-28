@@ -18,7 +18,7 @@ import { StepCard } from "@/components/war/step-card";
 import { Badge, Button, Empty, Panel, Select } from "@/components/ui";
 import { api, ApiError, streamUrl } from "@/lib/api";
 import { humanize, inr, istTime, stopwatch } from "@/lib/format";
-import { finished } from "@/lib/run";
+import { finished, remediationOutcomes } from "@/lib/run";
 import { STRATEGY_NAMES, type IncidentSummary, type Strategy } from "@/lib/types";
 import { useRunStream, type StreamStatus } from "@/lib/use-stream";
 
@@ -94,6 +94,7 @@ export default function WarRoom() {
   ];
   const status = STATUS[stream.status];
   const done = run ? finished(run) : false;
+  const outcomes = run ? remediationOutcomes(run) : {};
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -151,7 +152,9 @@ export default function WarRoom() {
             {!run?.started && stream.status !== "ended" && (
               <Empty>{stream.status === "error" ? "The stream dropped." : "Preparing the incident and the model…"}</Empty>
             )}
-            {run?.steps.map((step, i) => <StepCard key={step.seq} step={step} index={i + 1} />)}
+            {run?.steps.map((step, i) => (
+              <StepCard key={step.seq} step={step} index={i + 1} outcome={outcomes[step.seq]} />
+            ))}
             {run?.errors.map((e, i) => (
               <p key={i} className="rounded-md border border-critical/40 bg-critical/10 p-3 text-sm text-critical">
                 {e}
