@@ -54,7 +54,10 @@ class Diagnosis(BaseModel):
 
     root_cause_category: RootCause
     culprit_service: str = Field(
-        description="Component name from get_topology, or 'nodes' for a node-level cause"
+        description=(
+            "The component at fault, as named in get_topology: the service whose change caused it, or the "
+            "dependency that itself failed (not one that only shows the symptom); 'nodes' for a node-level cause"
+        )
     )
     trigger_change_id: str | None = Field(
         None, description="chg-... id from list_changes, if a change caused it"
