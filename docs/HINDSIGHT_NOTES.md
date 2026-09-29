@@ -35,17 +35,36 @@ The SDK retries transient failures itself (`max_attempts=3`) and defaults to a 3
 - **Consolidation** runs automatically after retains (`enable_auto_consolidation`, default on). `POST /consolidate` forces a run and deduplicates against a pending task. `GET /stats` exposes `pending_consolidation`, `total_observations` and `last_consolidated_at`, which the settle step polls.
 - **`/version` is public** on Cloud. `features.worker` and `features.bank_llm_health` are reported off on the API node.
 
-## 3. Live spike results
+## 3. Live spike results (Hindsight Cloud, 29 Sep 2026)
 
-`make spike` runs `backend/scripts/spike_hindsight.py` against the configured server on a throwaway bank. The run has not happened yet because `HINDSIGHT_API_KEY` isn't configured. Timings and pass/fail results go here after the first run:
+`make spike` runs `backend/scripts/spike_hindsight.py` on throwaway banks. Two live runs so far (raw notes in `data/spike/`, gitignored): the first 18 PASS / 7 FAIL / 2 SKIP, the second 22 PASS / 4 FAIL / 2 SKIP after the fixes below. The checks have since been corrected for the export and clone findings.
 
 | Measure | Value |
 |---|---|
-| Spike table | {{placeholder}} |
-| Sync retain of one postmortem | {{placeholder}} |
-| Async retain of 4 items (submit → completed) | {{placeholder}} |
-| Operation completed → fact recallable | {{placeholder}} |
-| Consolidation trigger → observations present | {{placeholder}} |
-| Observation scopes created | {{placeholder}} |
-| Investigation log fact type | {{placeholder}} |
-| Prompt-injection rule on Cloud | {{placeholder}} |
+| Sync retain of one postmortem | 6.0 s and 6.6 s (4 units, all `world`, tags + metadata present) |
+| Async retain of 4 items (submit → completed) | 30.6 s, then 8.7 s |
+| Operation completed → fact recallable | 0.8 s, then 0.6 s |
+| Consolidation trigger → observations present | 11.4 s (13 observations), then 3.0 s (9 observations) |
+| Investigation log fact type | `experience` (first-person context naming the bank's agent works) |
+| Upsert via the same `document_id`, `update_mode: append` | work |
+| `tags_match="any"` | untagged handbook visible with `any`, hidden with `any_strict` |
+| Reflect with `response_schema` + `include_facts` | structured output valid; `based_on` held 35 memories |
+| Knowledge page create / get | works (372 chars of markdown) |
+| Invalidate / restore | invalidated facts leave recall; restore brings them back |
+| Graph + entities | 37 nodes, 591 edges, 36 entities on a small bank |
+| Chunk mode (RAG ablation) | returns verbatim chunks as `world` results: usable as plain retrieval |
+| Day-0 import into `kestrel-ops-live` | 69.8 s from submit to settled |
+
+### What surprised us
+
+- **Memory Defense is not available to our organisation.** `PATCH /config` with `memory_defense` answers 400 `detectors_not_entitled` (`sensitive_data`). The adapter now applies Memory Defense in its own call and carries on without it; secrets are redacted client-side (`dejavu/security.py`) before anything is retained, and the spike checks that a leaked token never reaches memory.
+- **Observations inherit their source's full tag set.** Explicit `observation_scopes` and `per_tag` produced the same grouping as the default: one group per exact tag set. A `kind:` tag therefore splits beliefs about the same service by document type. We moved kind and team into metadata and keep tags to org, service and symptom.
+- **`retain_files` finishes in two steps.** The `file_convert_retain` operation completes when conversion is done; the document and its units appear 10 to 18 s later. The `timestamp` in `files_metadata` is honoured (stored as the document's `event_date`).
+- **Mental models wait for sources.** A model created before any observations exist stays at "Generating content..." and its refresh reports `reflect_skipped: no_sources_in_scope` / `content_preserved_no_new_facts` until consolidation has produced observations in scope.
+- **`GET /stats` lags.** Right after the Day-0 import it reported 0 nodes and 0 documents while `/documents` and `/memories/list` already returned them.
+- **SDK bug in `aexport_bank`.** It passes the server's absolute `download_url` as a path, so the host is doubled (`api.hindsight.vectorize.iohttps:443`). `HindsightRest.export_bank` downloads it directly.
+- **Clone** copies documents faithfully; node counts differ while the source is still consolidating, so the check compares documents.
+
+### Model limits (Groq, same key)
+
+Free tier for `openai/gpt-oss-120b`: 1,000 requests per day and 8,000 tokens per minute (response headers). One live investigation of Gauntlet incident 1 used 16 calls and 65,653 tokens and took 10.1 minutes of wall time at that limit, so the full Gauntlet needs the paid Developer tier.
