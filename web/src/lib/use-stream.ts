@@ -30,7 +30,14 @@ export function useRunStream(url: string | null): StreamState {
     const current = (prev: Keyed): Keyed => (prev.url === url ? prev : { url, lanes: {}, status: "connecting" });
 
     const onEvent = (message: MessageEvent<string>) => {
-      const event = JSON.parse(message.data) as TraceEvent;
+      // The browser fires its own data-less `error` event on connection drops; only parse ours.
+      if (typeof message.data !== "string") return;
+      let event: TraceEvent;
+      try {
+        event = JSON.parse(message.data) as TraceEvent;
+      } catch {
+        return;
+      }
       const key = `${event.run_id}:${event.seq}`;
       if (keys.has(key)) return;
       keys.add(key);
