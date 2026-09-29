@@ -103,3 +103,13 @@ async def test_demo_reset_reclones_the_live_bank(api: Api) -> None:
     body = (await api.http.post("/demo/reset")).json()
     assert body == {"live": settings.dejavu_bank_live, "cloned_from": settings.dejavu_bank_trained}
     assert len(api.memory.items[settings.dejavu_bank_live]) == 1
+
+
+async def test_a_model_stuck_on_its_placeholder_is_answered_by_reflect(api: Api) -> None:
+    bank = api.services.settings.dejavu_bank_live
+    await setup_bank(api.memory, bank)
+    api.memory.models[bank]["change-risk-register"]["content"] = "Generating content...\n"
+    body = (await api.http.get("/memory/models/change-risk-register")).json()
+    assert body["on_demand"] is True
+    assert body["model"]["content"] == "reflection"
+    assert api.memory.reflects[-1]["query"].startswith("Which kinds of changes")
