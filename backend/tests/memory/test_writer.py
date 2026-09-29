@@ -18,8 +18,8 @@ INCIDENT_ONE = next(s for s in gauntlet() if entry_for(s).n == 1)
 
 def _assert_conventions(item) -> None:
     assert "org:kestrel" in item.tags
-    assert any(t.startswith("kind:") for t in item.tags)
-    assert not any(t.startswith("incident:") for t in item.tags), item.tags
+    assert not any(t.startswith(("kind:", "team:", "incident:")) for t in item.tags)
+    assert item.metadata["kind"]
     assert item.timestamp.tzinfo is not None
 
 
@@ -48,7 +48,7 @@ def test_migration_documents_are_tagged_as_migrations() -> None:
     for doc in migration_documents():
         item = document_item(doc)
         _assert_conventions(item)
-        assert "kind:migration" in item.tags
+        assert item.metadata["kind"] == "migration"
 
 
 @pytest.fixture

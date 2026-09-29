@@ -26,5 +26,5 @@ async def test_old_runbooks_are_tagged_by_service() -> None:
     await import_day0(memory, "bank", timeout_s=5)
     runbook = next(i for i in memory.items["bank"] if i.document_id == "RB-ledger-pool")
     assert "service:ledger-svc" in runbook.tags
-    assert "kind:runbook" in runbook.tags
+    assert runbook.metadata["kind"] == "runbook"
     assert runbook.context == "runbook"
