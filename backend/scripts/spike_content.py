@@ -91,3 +91,11 @@ def secret_debug_line(token: str) -> str:
         "2026-09-13 21:05:44.102 DEBUG acquirerx client request headers "
         f'{{"Authorization": "Bearer {token}", "X-Request-Id": "7f3a91c2"}}'
     )
+
+
+POST_MIGRATION_OUTCOME = (
+    "Outcome of INC-4249 (Sun 6 Sep 2026, CheckoutLatencyP99High): connection pool exhaustion in "
+    "ledger-svc after 3.16.3, three days after ledger-svc moved behind PgBouncer. Raising the HikariCP "
+    "pool had no effect: the queue now forms in PgBouncer (pgbouncer_cl_waiting climbed, "
+    "query_wait_timeout in its logs). Raising PgBouncer default_pool_size and rolling back 3.16.3 fixed it."
+)

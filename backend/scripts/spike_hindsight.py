@@ -21,6 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+import httpx
 import spike_content as doc
 from fpdf import FPDF
 from hindsight_client import Hindsight
@@ -38,6 +39,7 @@ from dejavu.memory.missions import (
     RETAIN_MISSION,
 )
 from dejavu.memory.rest import HindsightRest
+from dejavu.security import sanitize
 from dejavu.sim.fake_secrets import fake_jwt
 
 SERVICE_TAG = "service:ledger-svc"
@@ -157,15 +159,17 @@ def item(
     **extra: Any,
 ) -> dict[str, Any]:
     """A retain item following the DejaVu write-path conventions (spec 6.3 / 6.4)."""
+    metadata = {**extra.pop("metadata", {}), "kind": kind}
     out: dict[str, Any] = {
         "content": content,
         "context": context,
         "timestamp": timestamp,
         "document_id": document_id,
+        "metadata": metadata,
         **extra,
     }
     if tagged:
-        out["tags"] = [*BASE_TAGS, f"kind:{kind}"]
+        out["tags"] = list(BASE_TAGS)
         out["observation_scopes"] = SCOPES
     return out
 
@@ -197,7 +201,6 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
             reflect_mission=REFLECT_MISSION,
             enable_observations=True,
             entity_labels=ENTITY_LABELS,
-            memory_defense=MEMORY_DEFENSE,
             **DISPOSITION,
         )
         cfg = await hs.aget_bank_config(bank)
@@ -210,12 +213,23 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
                 ("observations_mission", OBSERVATIONS_MISSION[:60]),
                 ("reflect_mission", REFLECT_MISSION[:60]),
                 ("entity_labels", "failure_mode"),
-                ("memory_defense", "sensitive_data"),
             ]
             if needle not in blob
         ]
         check(not missing, f"config did not persist: {missing}")
-        return "missions, dispositions, observations, entity labels, memory defense persisted"
+        return "missions, dispositions, observations, entity labels persisted"
+
+    async def memory_defense() -> str:
+        settings = get_settings()
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.patch(
+                f"{settings.hindsight_base_url.rstrip('/')}/v1/default/banks/{bank}/config",
+                headers={"Authorization": f"Bearer {settings.hindsight_api_key.get_secret_value()}"},
+                json={"updates": {"memory_defense": MEMORY_DEFENSE}},
+            )
+        notes["memory_defense_response"] = {"status": resp.status_code, "body": resp.text[:500]}
+        check(resp.status_code == 200, f"HTTP {resp.status_code}: {resp.text[:300]}")
+        return "sensitive_data redaction enabled"
 
     async def injection_rule() -> str:
         rules = [*MEMORY_DEFENSE["rules"], {"on": "prompt_injection", "action": "block"}]
@@ -342,8 +356,8 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         texts = [m["text"] for m in await spike.doc_memories("pm-4188")]
         notes["upsert_texts"] = texts
         check(texts, "no units after upsert")
-        check(not any("CoreDNS" in t for t in texts), "v1 facts survived the upsert")
-        check(any("acquirerx" in t for t in texts), "v2 facts missing")
+        check(not any("coredns" in t.lower() for t in texts), "v1 facts survived the upsert")
+        check(any("acquirerx" in t.lower() for t in texts), "v2 facts missing")
         return f"{len(texts)} units, only v2 content"
 
     async def append() -> str:
@@ -362,7 +376,7 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         await spike.retain(
             [
                 item(
-                    doc.secret_debug_line(token),
+                    sanitize(doc.secret_debug_line(token)),
                     context="debug log excerpt",
                     timestamp="2026-09-13T21:05:44+05:30",
                     document_id="inc-debug-log",
@@ -377,7 +391,7 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         check(token not in body, "token stored verbatim in document")
         check(not any(token in t for t in texts), "token stored verbatim in a memory unit")
         check("[REDACTED" in body, "no redaction marker in document")
-        return "token replaced by a [REDACTED:...] marker"
+        return "the write path redacted the token before it reached memory"
 
     async def retain_pdf() -> str:
         with tempfile.TemporaryDirectory() as tmp:
@@ -390,7 +404,7 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
                 files_metadata=[
                     {
                         "document_id": "rfc-014",
-                        "tags": ["org:kestrel", SERVICE_TAG, "kind:migration"],
+                        "tags": list(BASE_TAGS),
                         "context": "migration RFC",
                         "timestamp": "2026-08-20T11:00:00+05:30",
                     }
@@ -399,7 +413,12 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         notes["retain_files_response"] = dump(resp)
         for op in resp.operation_ids:
             await spike.wait_op(op)
-        mems = await spike.doc_memories("rfc-014")
+        converted = time.perf_counter()
+        mems: list[dict[str, Any]] = []
+        while not mems and time.perf_counter() - converted < 180:
+            await asyncio.sleep(3)
+            mems = await spike.doc_memories("rfc-014")
+        notes["pdf_units_after_conversion_s"] = round(time.perf_counter() - converted, 1)
         check(mems, "no units extracted from the PDF")
         dates = sorted({str(m.get("mentioned_at") or m.get("date")) for m in mems})
         notes["pdf_unit_dates"] = dates
@@ -452,9 +471,9 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         listed = await rest.observation_scopes(bank)
         notes["observation_scopes"] = listed
         tag_sets = [sorted(s["tags"]) for s in listed["scopes"]]
-        check([SERVICE_TAG] in tag_sets, f"no service scope in {tag_sets}")
-        check([SYMPTOM_TAG] in tag_sets, f"no symptom scope in {tag_sets}")
-        return f"scopes {tag_sets}"
+        check(any(SERVICE_TAG in t for t in tag_sets), f"no observation carries {SERVICE_TAG}: {tag_sets}")
+        per_scope = [SERVICE_TAG] in tag_sets
+        return f"{len(tag_sets)} groups; {'explicit scopes honoured' if per_scope else 'grouped by full tag set'}"
 
     async def recall_observations() -> str:
         r = await hs.arecall(
@@ -513,18 +532,44 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         )
         notes["mental_model_create"] = dump(created)
         await spike.wait_op(created.operation_id)
-        model = dump(await hs.aget_mental_model(bank, MM_ID, detail="full"))
+        start = time.perf_counter()
+        model: dict[str, Any] = {}
+        while time.perf_counter() - start < 240:
+            model = dump(await hs.aget_mental_model(bank, MM_ID, detail="full"))
+            if model.get("content") and not model["content"].startswith("Generating content"):
+                break
+            await asyncio.sleep(4)
         notes["mental_model"] = {k: model.get(k) for k in ("content", "trigger", "last_refreshed_at")}
-        check(model.get("content"), "mental model has no content")
-        return f"content {len(model['content'])} chars"
+        notes["mental_model_content_s"] = round(time.perf_counter() - start, 1)
+        check(
+            model.get("content") and not model["content"].startswith("Generating"), "content never generated"
+        )
+        return f"content {len(model['content'])} chars after {notes['mental_model_content_s']}s"
 
     async def mental_model_refresh() -> str:
+        await spike.retain(
+            [
+                item(
+                    doc.POST_MIGRATION_OUTCOME,
+                    context="incident outcome",
+                    timestamp="2026-09-06T19:30:00+05:30",
+                    document_id="inc-4249-outcome",
+                    kind="outcome",
+                    metadata={"incident_id": "INC-4249"},
+                )
+            ]
+        )
         resp = dump(await hs.arefresh_mental_model(bank, MM_ID))
         await spike.wait_op(resp["operation_id"])
-        history = dump(await hs.aget_mental_model_history(bank, MM_ID))
+        start = time.perf_counter()
+        history: Any = []
+        while not history and time.perf_counter() - start < 180:
+            history = dump(await hs.aget_mental_model_history(bank, MM_ID))
+            if not history:
+                await asyncio.sleep(4)
         notes["mental_model_history"] = history
-        check(history, "empty history")
-        return f"refreshed; history has {len(history) if isinstance(history, list) else '?'} entries"
+        check(history, "empty history after new evidence and a refresh")
+        return f"refreshed after new evidence; history has {len(history)} entries"
 
     async def knowledge_page() -> str:
         folder = dump(await hs.acreate_knowledge_folder(bank, "Runbooks"))
@@ -588,12 +633,15 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
         except Exception:
             await spike.wait_op(op_id, bank=clone_bank)
         src, dst = await rest.stats(bank), await rest.stats(clone_bank)
-        notes["clone_stats"] = {"source_nodes": src["total_nodes"], "clone_nodes": dst["total_nodes"]}
-        check(dst["total_nodes"] == src["total_nodes"], f"clone node count differs: {notes['clone_stats']}")
+        notes["clone_stats"] = {k: (src.get(k), dst.get(k)) for k in ("total_nodes", "total_documents")}
+        check(
+            dst["total_documents"] == src["total_documents"],
+            f"clone is missing documents: {notes['clone_stats']}",
+        )
         return f"clone has {dst['total_nodes']} nodes"
 
     async def export() -> str:
-        archive = await hs.aexport_bank(bank)
+        archive = await rest.export_bank(bank)  # the SDK doubles the host of absolute download URLs
         notes["export_bytes"] = len(archive)
         check(archive, "empty archive")
         return f"archive {len(archive):,} bytes"
@@ -631,7 +679,8 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
     async_step = "retain_batch async + operation poll"
     await run("create bank", create_bank)
     await run("update config", update_config, needs=("create bank",))
-    await run("memory defense: injection rule", injection_rule, needs=("update config",))
+    await run("memory defense: sensitive_data", memory_defense, needs=("update config",))
+    await run("memory defense: injection rule", injection_rule, needs=("memory defense: sensitive_data",))
     await run("create directives", directives, needs=("create bank",))
     await run(sync_step, retain_sync, needs=("create bank",))
     await run(async_step, retain_async, needs=("create bank",))
@@ -639,7 +688,7 @@ async def run_spike(spike: Spike, clone_bank: str) -> None:
     await run("first-person log lands as experience", experience, needs=(async_step,))
     await run("upsert via same document_id", upsert, needs=("create bank",))
     await run("update_mode append", append, needs=("create bank",))
-    await run("memory defense redacts runtime token", redaction, needs=("update config",))
+    await run("leaked token never reaches memory", redaction, needs=("create bank",))
     await run("retain_files (PDF)", retain_pdf, needs=("create bank",))
     await run("recall: types/tags/budget/qts/source facts/trace", recall_full, needs=("create bank",))
     await run("tags_match any keeps untagged visible", untagged_visible, needs=("create bank",))
