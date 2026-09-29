@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette import EventSourceResponse
 
+from dejavu.agent.loop import LoopConfig
 from dejavu.api.deps import Svc
 from dejavu.api.live import LiveRun
 from dejavu.api.routes.incidents import create_record, run_summary
@@ -19,6 +20,8 @@ from dejavu.api.sse import race_messages, stream
 from dejavu.store.db import RaceRecord
 
 router = APIRouter(tags=["race"])
+# Two lanes share one model's rate limit, so races get a tighter budget than the War Room.
+RACE_LOOP = LoopConfig(max_steps=10, context_tokens=4500)
 
 
 class NewRace(BaseModel):
@@ -43,6 +46,7 @@ async def start_race(body: NewRace, svc: Svc) -> dict[str, Any]:
             race_id=race_id,
             lane=lane,
             auto_approve=True,
+            config=RACE_LOOP,
         )
         for lane, label in (("left", body.left), ("right", body.right))
     }
