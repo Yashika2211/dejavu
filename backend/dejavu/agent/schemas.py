@@ -66,7 +66,9 @@ class Diagnosis(BaseModel):
     confidence: float = Field(ge=0, le=1)
     evidence: list[EvidenceRef] = Field(default_factory=list)
     remediation_plan: list[PlannedAction] = Field(default_factory=list)
-    precedent_incident_ids: list[str] = Field(default_factory=list)
+    precedent_incident_ids: list[str] = Field(
+        default_factory=list, description="Incident ticket numbers such as INC-4127 (never memory ids)"
+    )
     memory_used: bool = False
 
 
@@ -95,7 +97,9 @@ class LikelyCause(BaseModel):
     service: str
     prior: float = Field(ge=0, le=1)
     why: str
-    precedent_incident_ids: list[str] = Field(default_factory=list)
+    precedent_incident_ids: list[str] = Field(
+        default_factory=list, description="Incident ticket numbers such as INC-4127 (never memory ids)"
+    )
     last_seen: str | None = None
     still_valid: Literal["yes", "no", "unknown"] = "unknown"
     validity_note: str = ""
@@ -109,7 +113,9 @@ class FirstCheck(BaseModel):
 class AvoidAction(BaseModel):
     action: str
     reason: str
-    precedent_incident_ids: list[str] = Field(default_factory=list)
+    precedent_incident_ids: list[str] = Field(
+        default_factory=list, description="Incident ticket numbers such as INC-4127 (never memory ids)"
+    )
 
 
 class TriageBrief(BaseModel):
