@@ -11,6 +11,7 @@ reflect has no such parameter (0.10.1), so the triage query states the time in i
 from pydantic import ValidationError
 
 from dejavu.agent.schemas import TriageBrief
+from dejavu.llm.toolcalling import inline_schema
 from dejavu.memory.hindsight_adapter import MemoryBackend, MemoryHit, ReflectAnswer
 from dejavu.sim.clock import fmt_hm
 from dejavu.strategies.base import IncidentContext, MemoryBriefing
@@ -109,7 +110,7 @@ async def triage_brief(memory: MemoryBackend, bank_id: str, ctx: IncidentContext
             bank_id,
             query,
             budget="mid",
-            response_schema=TriageBrief.model_json_schema(),
+            response_schema=inline_schema(TriageBrief),
             tags=tags,
             tags_match="any",
         )
