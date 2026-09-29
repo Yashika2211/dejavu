@@ -1,8 +1,11 @@
 """The write path (spec 6.4): what DejaVu retains, when, and how it is tagged.
 
-- Tags are low-cardinality filters (org, service, symptom, kind, team). Never incident IDs: a
-  per-incident tag would fragment observations per incident. IDs go in document_id and metadata.
-- observation_scopes are explicit, so observations accumulate per service and per symptom class.
+- Tags are the few filters reads use (org, service, symptom). Never incident IDs, and not the
+  document kind or team either: on Hindsight Cloud 0.10.1 an observation carries its source's full
+  tag set, so every extra tag splits beliefs (spike, 29 Sep). Kind, team and incident IDs go in
+  document_id and metadata.
+- observation_scopes are explicit (per service, per symptom); the server currently groups by the
+  full tag set anyway, which is why the tag set stays small.
 - timestamp is always the simulated event time; omitting it disables temporal ranking.
 - Content is raw, never pre-summarised, but sanitised first (secrets, injection text). Memory
   Defense redacts secrets again on the server.
@@ -54,14 +57,10 @@ _PEOPLE = re.compile(
 )
 
 
-def tags_for(
-    services: list[str], symptom: SymptomClass | None, kind: str, team: str | None = None
-) -> list[str]:
-    tags = [ORG_TAG, *(f"service:{s}" for s in dict.fromkeys(services)), f"kind:{kind}"]
+def tags_for(services: list[str], symptom: SymptomClass | None) -> list[str]:
+    tags = [ORG_TAG, *(f"service:{s}" for s in dict.fromkeys(services))]
     if symptom:
         tags.append(f"symptom:{symptom.value}")
-    if team:
-        tags.append(f"team:{team}")
     return tags
 
 
@@ -93,10 +92,11 @@ def document_item(doc: Document) -> RetainItem:
         context=context,
         timestamp=doc.date,
         document_id=doc.id,
-        tags=tags_for(doc.services, doc.symptom, _doc_kind(doc)),
+        tags=tags_for(doc.services, doc.symptom),
         metadata={
             "author": doc.author,
             "title": doc.title,
+            "kind": _doc_kind(doc),
             **({"incident_id": doc.incident_id} if doc.incident_id else {}),
         },
         entities=entities_for(doc.services, doc.body),
@@ -127,8 +127,8 @@ def document_file(doc: Document, directory: Path) -> FileItem:
         document_id=doc.id,
         context=KIND_CONTEXT.get(doc.kind, doc.kind),
         timestamp=doc.date,
-        tags=tags_for(doc.services, doc.symptom, _doc_kind(doc)),
-        metadata={"author": doc.author, "title": doc.title},
+        tags=tags_for(doc.services, doc.symptom),
+        metadata={"author": doc.author, "title": doc.title, "kind": _doc_kind(doc)},
     )
 
 
@@ -192,7 +192,7 @@ def incident_items(resolution: Resolution, changes: list[ChangeEvent]) -> list[R
     out = resolution.outcome
     services = _services(resolution)
     team = inc.alert.get("labels", {}).get("team")
-    meta = {"incident_id": inc.incident_id}
+    tags = tags_for(services, inc.symptom)
     scopes = scopes_for(services, inc.symptom)
     ents = entities_for(services, " ".join(d.body for d in resolution.documents.values()))
 
@@ -204,8 +204,8 @@ def incident_items(resolution: Resolution, changes: list[ChangeEvent]) -> list[R
             context=context,
             timestamp=when,
             document_id=doc_id,
-            tags=tags_for(services, inc.symptom, kind, team),
-            metadata=meta,
+            tags=tags,
+            metadata={"incident_id": inc.incident_id, "kind": kind, **({"team": team} if team else {})},
             entities=ents,
             observation_scopes=scopes,
             **extra,
@@ -291,7 +291,7 @@ def incident_items(resolution: Resolution, changes: list[ChangeEvent]) -> list[R
                 RetainItem(
                     **{
                         **document_item(doc).model_dump(),
-                        "tags": tags_for(services, inc.symptom, kind, team),
+                        "tags": tags,
                         "observation_scopes": scopes,
                     }
                 )
