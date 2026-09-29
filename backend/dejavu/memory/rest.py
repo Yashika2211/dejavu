@@ -130,6 +130,21 @@ class HindsightRest:
         """Trigger consolidation now; returns `{operation_id, deduplicated}`."""
         return await self._request("POST", f"{self._bank(bank_id)}/consolidate", json={})
 
+    async def export_bank(self, bank_id: str, *, timeout_s: float = 300.0) -> bytes:
+        """The bank as a transfer ZIP (a downloadable "brain"). The SDK's `aexport_bank` treats the
+        absolute download URL as a path and doubles the host, so this goes through REST."""
+        submitted = await self._request(
+            "POST", f"{self._bank(bank_id)}/transfer/export", params={"include_data": True}
+        )
+        status = await self.wait_for_operation(bank_id, submitted["operation_id"], timeout_s=timeout_s)
+        url = (status.get("result_metadata") or {}).get("download_url")
+        if not url:
+            raise RuntimeError(f"export of {bank_id} finished without a download_url")
+        absolute = url if url.startswith("http") else f"{self._base}{url}"
+        response = await self._client.get(absolute, headers={**self._headers, "Accept": "application/zip"})
+        response.raise_for_status()
+        return response.content
+
     async def observation_scopes(self, bank_id: str, *, limit: int = 100) -> dict[str, Any]:
         return await self._request(
             "GET", f"{self._bank(bank_id)}/observations/scopes", params={"limit": limit}
