@@ -72,10 +72,17 @@ def _inline_refs(node: Any, defs: dict[str, Any]) -> Any:
     return node
 
 
+def inline_schema(model: type[BaseModel]) -> dict[str, Any]:
+    """The model's JSON schema with every `$ref` inlined. Hindsight's reflect flattens nested
+    objects to strings when they sit behind `$defs` (live, 29 Sep), and Groq tools want them inline."""
+    schema = model.model_json_schema()
+    return {"title": schema.get("title", model.__name__), **_inline_refs(schema, schema.get("$defs", {}))}
+
+
 def tool_spec(name: str, description: str, args: type[BaseModel]) -> ToolSpec:
     """A tool definition from a Pydantic model, with a required `rationale` and refs inlined."""
-    schema = args.model_json_schema()
-    params = _inline_refs(schema, schema.get("$defs", {}))
+    params = inline_schema(args)
+    params.pop("title", None)
     params.setdefault("properties", {})["rationale"] = RATIONALE
     params["required"] = [*params.get("required", []), "rationale"]
     params["type"] = "object"
