@@ -120,7 +120,9 @@ async def stream_incident(
     run: LiveRun | None = None
     if not fresh:
         earlier = [
-            r for r in svc.store.runs(incident_id=incident_id) if r.strategy == strategy and r.race_id is None
+            r
+            for r in svc.store.runs(incident_id=incident_id)
+            if r.strategy == strategy and r.race_id is None and r.status in ("running", "done")
         ]
         run = svc.runs.get(earlier[-1].id) if earlier else None
     if run is None:
