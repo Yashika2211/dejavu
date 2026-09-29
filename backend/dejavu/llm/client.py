@@ -40,6 +40,7 @@ from dejavu.llm.ratelimit import Limits, RateLimiters
 from dejavu.tokens import count_tokens
 
 RETRYABLE_STATUS = {500, 502, 503, 504}
+EXPECTED_REPLY_TOKENS = 500
 
 
 @dataclass(frozen=True)
@@ -181,7 +182,9 @@ class LLMClient:
         purpose: str = "agent",
     ) -> LLMResponse:
         """One chat completion, retried on rate limits and server errors."""
-        estimate = count_tokens(json.dumps(messages)) + max_tokens
+        # Reserve a realistic reply, not the ceiling: replies average ~250 tokens, and reserving
+        # max_tokens halved throughput under an 8K tokens/minute limit. Groq's 429s cover the rest.
+        estimate = count_tokens(json.dumps(messages)) + min(max_tokens, EXPECTED_REPLY_TOKENS)
         state = _Attempt()
         limiter = self._limiters.for_model(model)
         kwargs: dict[str, Any] = {
