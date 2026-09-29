@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     web_port: int = 3000
     http_timeout_s: float = 30.0
     approval_timeout_s: float = 120.0  # a critical remediation nobody approves in time is declined
+    cors_origin_regex: str = r"https://.*\.vercel\.app"  # the deployed war room
 
     @field_validator("llm_fallbacks", mode="before")
     @classmethod
