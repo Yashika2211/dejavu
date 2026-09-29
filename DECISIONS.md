@@ -39,3 +39,7 @@ One line each: decision, then why.
 - A risky pending change is exactly the trigger change of a latent scenario, so the reviewer sees what would ship and the prevention rule has ground truth. "₹ at risk avoided" is the latent incident's simulated impact over its first 30 minutes, labelled as such.
 - The UI screenshot pass used a dev-only harness (scripted model, fake memory) kept out of the repo, so the layout could be checked without keys. Its numbers are not results and are never shown as such.
 
+- Memory Defense is applied in its own config call and may be refused (our Cloud organisation answers `detectors_not_entitled`); bank setup continues, and client-side redaction in `dejavu/security.py` is the layer that holds.
+- Tags are only org, service and symptom; kind and team moved to metadata. Live Hindsight groups observations by each source's full tag set regardless of `observation_scopes`, so extra tags split beliefs.
+- Bank export goes through REST (`HindsightRest.export_bank`): the SDK's `aexport_bank` doubles the host of the absolute download URL.
+- `culprit_service` is defined as the component at fault (the service whose change caused it, or the dependency that failed), in both the prompt and the schema, after the first live run named the database for a bad deploy. The change applies to every strategy.
