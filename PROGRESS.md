@@ -16,8 +16,8 @@ Live checklist. Phases are gates (spec Section 15).
 - [ ] CI workflow: written locally, push blocked (token lacks `workflow` scope)
 - [x] `docs/HINDSIGHT_NOTES.md` (offline verification; live timings pending)
 - [x] `make test` runs: 27 passed, 1 live test skipped
-- [ ] **Blocked:** `HINDSIGHT_API_KEY` and `GROQ_API_KEY` needed in `.env` to run the live spike
-- [ ] **DoD:** spike table all PASS or every FAIL documented with a workaround
+- [x] Keys in `.env` (29 Sep); `make health` OK for Groq and Hindsight
+- [x] **DoD:** live spike run twice (22 PASS / 4 FAIL / 2 SKIP on the second); every FAIL documented with a workaround in `docs/HINDSIGHT_NOTES.md` section 3
 - [ ] Paused for review
 
 ## Phase 1: SRE-Gym
@@ -49,7 +49,8 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] Grader (correct, ttd, MTTR rules, wasted steps, harmful actions, precedent precision, cost, ₹ at risk)
 - [x] `scripts/run_incident.py` / `make run`
 - [x] **DoD (offline):** loop tests with a scripted model, error-handling tests (tool_use_failed, invalid args, 429 retry-after, 5xx, 413), injection + leaked-token test, grader tests (414 tests pass)
-- [ ] **DoD (live, blocked on GROQ_API_KEY):** amnesiac end to end on real incidents; live injection test on incident 16
+- [x] **DoD (live):** amnesiac end to end on Gauntlet incident 1 (16 steps, 65,653 tokens, trace `data/runs/inc-4127-amnesiac.jsonl`)
+- [ ] Live injection test on incident 16 (Groq free-tier quota)
 
 ## Phase 3: DejaVu memory strategy
 
