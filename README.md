@@ -89,6 +89,8 @@ make test                   # ruff, web lint, backend tests
 
 Other targets: `make spike` (Hindsight contract checks), `make mini-sequence`, `make gauntlet`, `make report`.
 
+Deploying (API on Render, war room on Vercel, or `docker compose up --build`): see [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
 ## Repo
 
 - `backend/`: Python 3.12 (uv). Simulator (`sim/`), agent (`agent/`), LLM layer (`llm/`), memory (`memory/`), strategies, eval harness (`eval/`), Foresight, API.
