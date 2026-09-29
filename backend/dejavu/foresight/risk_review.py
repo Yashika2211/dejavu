@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from dejavu.foresight.pending import PendingChange
 from dejavu.llm.errors import LLMError
-from dejavu.llm.toolcalling import ToolCaller, tool_spec
+from dejavu.llm.toolcalling import ToolCaller, inline_schema, tool_spec
 from dejavu.memory.hindsight_adapter import MemoryBackend, MemoryHit
 from dejavu.sim.scenario import Safeguard, Scenario
 
@@ -37,7 +37,7 @@ GENERIC_QUESTION = (
 
 
 class Precedent(BaseModel):
-    incident_id: str
+    incident_id: str = Field(description="an incident ticket number such as INC-4127 (never a memory id)")
     date: str | None = None
     resemblance: str = Field(description="how this change resembles what happened then")
 
@@ -89,7 +89,7 @@ async def memory_review(memory: MemoryBackend, bank: str, change: PendingChange)
         bank,
         MEMORY_QUESTION.format(change=describe(change)),
         budget="mid",
-        response_schema=RiskReview.model_json_schema(),
+        response_schema=inline_schema(RiskReview),
         tags=[f"service:{change.service}"],
         tags_match="any",
     )
