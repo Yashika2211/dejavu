@@ -1,0 +1,21 @@
+# Render blueprint for the DejaVu API (New → Blueprint → this repo). Set the two secrets in the
+# dashboard when asked; the web app goes on Vercel with NEXT_PUBLIC_API_URL pointing here.
+services:
+  - type: web
+    name: dejavu-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /changes/pending
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: HINDSIGHT_API_KEY
+        sync: false
+      - key: HINDSIGHT_BASE_URL
+        value: https://api.hindsight.vectorize.io
+      - key: DEJAVU_BANK_LIVE
+        value: kestrel-ops-live
+      - key: DEMO_MODE
+        value: live
