@@ -64,7 +64,10 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] DejaVu strategy (`strategies/dejavu.py`) and calendar-order sequence runner (`eval/sequence.py`)
 - [x] NaiveRAG ablation (`strategies/rag.py`) inheriting DejaVu's write path
 - [x] **DoD (offline):** bank setup idempotent, Day-0 import, write path, settle, briefing + provenance, lookups, degraded mode, three-incident mini-sequence plumbing (all with a fake memory; 444 tests pass, 4 live skipped)
-- [ ] **DoD (live, blocked on both keys):** `make mini-sequence` (incidents 1 → 5 → 12 on a throwaway bank) shows memory moments and temporal validity; mental models refreshing; live mini-sequence test
+- [x] Live bank `kestrel-ops-live` built with `make bank` (11 mental models, Day-0 import settled in 69.8 s)
+- [x] Live DejaVu run on Gauntlet incident 1 with Day-0 memory only: briefed from Marcus's INC-3902 postmortem, correct diagnosis, 9 steps (trace `data/runs/inc-4127-dejavu.jsonl`); the amnesiac on the same incident named the wrong culprit in 16 steps (single runs, not Gauntlet results)
+- [x] Live fix: reflect needs inlined JSON schemas (nested objects came back as strings)
+- [ ] `make mini-sequence` and the Gauntlet: need Groq's paid Developer tier (free tier: 1,000 requests/day, 8,000 tokens/min; one investigation ≈ 40-66K tokens, ~10 min)
 
 ## Phase 4: the Gauntlet
 
@@ -83,7 +86,7 @@ Live checklist. Phases are gates (spec Section 15).
 - [x] Foresight backend: pending changes derived from latent incidents, risk reviews with and without memory, prevention rule of spec 8, simulated impact avoided
 - [x] Web (`web/`): War Room, Race, Memory (runbooks, timeline, explorer, growth), Learning, Foresight, Ask DejaVu (⌘K); empty, loading, offline and API-down states; reduced motion honoured
 - [x] Screenshot pass at 1440×900 and 1280×800 against the real API driven by a scripted model and a fake memory (layout only; nothing shown is a result)
-- [x] `make test` green: ruff, web lint, 489 backend tests pass (4 live tests skipped without keys); `pnpm build` clean
+- [x] `make test` green: ruff, web lint, 492 backend tests pass (live tests run only with `DEJAVU_LIVE=1`); `pnpm build` clean
 - [ ] **Blocked on both keys:** the same screens against real Groq + Hindsight (a real race, real briefings, real Foresight reviews)
 - [ ] Paused to show the UI
 
