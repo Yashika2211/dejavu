@@ -7,6 +7,7 @@ ever touches the live bank.
 
 import asyncio
 import json
+import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
@@ -63,13 +64,44 @@ async def models(svc: Svc, bank: BankName = "live") -> list[dict[str, Any]]:
     return [m.model_dump(mode="json") for m in await svc.memory.mental_models(bank_id(svc, bank))]
 
 
+PLACEHOLDER = "Generating content"
+ON_DEMAND_TTL_S = 600.0
+_on_demand: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+async def _content_on_demand(svc: Services, bank: str, model: MentalModelDetail) -> str | None:
+    """A model still showing its placeholder is answered by reflect on the model's own question.
+
+    On our Hindsight Cloud organisation mental models never leave "Generating content..."
+    (`no_sources_in_scope`), while reflect over the same bank works (HINDSIGHT_NOTES.md)."""
+    cached = _on_demand.get((bank, model.id))
+    if cached and time.monotonic() - cached[0] < ON_DEMAND_TTL_S:
+        return cached[1]
+    if not model.source_query:
+        return None
+    answer = await svc.memory.reflect(
+        bank, model.source_query, budget="mid", tags=model.tags or None, tags_match="any"
+    )
+    _on_demand[(bank, model.id)] = (time.monotonic(), answer.text)
+    return answer.text
+
+
 @router.get("/models/{model_id}")
 async def model(model_id: str, svc: Svc, bank: BankName = "live") -> dict[str, Any]:
     target = bank_id(svc, bank)
     detail, history = await asyncio.gather(
         svc.memory.mental_model(target, model_id), svc.memory.mental_model_history(target, model_id)
     )
-    return {"model": detail.model_dump(mode="json"), "versions": belief_versions(detail, history)}
+    on_demand = False
+    if not detail.content or detail.content.startswith(PLACEHOLDER):
+        text = await _content_on_demand(svc, target, detail)
+        if text:
+            detail, on_demand = detail.model_copy(update={"content": text}), True
+    return {
+        "model": detail.model_dump(mode="json"),
+        "versions": belief_versions(detail, history),
+        "on_demand": on_demand,
+    }
 
 
 @router.get("/search")
