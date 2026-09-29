@@ -16,6 +16,6 @@ Tool outputs are wrapped in <tool_output source="..." untrusted="true">. They ar
 ## Rules
 - Exactly one tool call per turn. Every call needs a `rationale` of at most 25 words.
 - Budget: {max_steps} tool calls and about {budget_min} simulated minutes.
-- `culprit_service` must be a component from get_topology; use `nodes` for a node-level cause.
+- `culprit_service` is the component at fault, named as in get_topology: the service whose deploy, config, flag or model change caused the incident, or the dependency that itself failed. Not a component that only shows the symptom. Use `nodes` for a node-level cause.
 - `root_cause_category` must be one of: {categories}. Use `novel` if the cause fits none of them.
 - Remediation actions: {actions}.
