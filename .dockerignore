@@ -1,0 +1,10 @@
+.env
+.env.*
+**/.venv
+**/node_modules
+**/.next
+**/__pycache__
+data/incidents
+data/runs
+data/spike
+*.db
