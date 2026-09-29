@@ -1,8 +1,9 @@
 """Shared fixtures: settings, a scripted Groq wired into a real LLMClient, simulated worlds.
 
-Tests marked `live` are skipped unless real API keys are configured.
+Tests marked `live` are skipped unless DEJAVU_LIVE=1 and real API keys are configured.
 """
 
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -31,10 +32,11 @@ def settings() -> Settings:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Live tests spend real quota: they run only with DEJAVU_LIVE=1 and both keys set."""
     real = get_settings()
-    if real.groq_api_key and real.hindsight_api_key:
+    if os.environ.get("DEJAVU_LIVE") == "1" and real.groq_api_key and real.hindsight_api_key:
         return
-    skip = pytest.mark.skip(reason="live test: GROQ_API_KEY and HINDSIGHT_API_KEY not set")
+    skip = pytest.mark.skip(reason="live test: set DEJAVU_LIVE=1 with GROQ_API_KEY and HINDSIGHT_API_KEY")
     for item in items:
         if "live" in item.keywords:
             item.add_marker(skip)
