@@ -10,11 +10,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
+import structlog
 from hindsight_client import Hindsight
 from pydantic import BaseModel, Field
 
 from dejavu.config import Settings
 from dejavu.memory.rest import HindsightRest
+
+log = structlog.get_logger(__name__)
 
 Budget = Literal["low", "mid", "high"]
 TagsMatch = Literal["any", "all", "any_strict", "all_strict", "exact"]
@@ -255,8 +258,20 @@ class HindsightMemory:
             raise MemoryUnavailableError(f"{type(exc).__name__}: {exc}"[:500]) from exc
 
     async def configure_bank(self, bank_id: str, **config: Any) -> None:
+        """Create or update the bank. Memory Defense goes in its own call and may be refused:
+        Cloud organisations without the detector answer `detectors_not_entitled`, and the write
+        path's own redaction still applies (`dejavu.security`)."""
+        defense = config.pop("memory_defense", None)
         await self._call(self._sdk.acreate_bank(bank_id, name=bank_id))
         await self._call(self._sdk.aupdate_bank_config(bank_id, **config))
+        if defense is None:
+            return
+        try:
+            await self._call(self._sdk.aupdate_bank_config(bank_id, memory_defense=defense))
+        except MemoryUnavailableError as exc:
+            log.warning(
+                "memory defense not applied; client-side redaction only", bank=bank_id, error=str(exc)[:200]
+            )
 
     async def directive_names(self, bank_id: str) -> set[str]:
         return {d.get("name", "") for d in _items(await self._call(self._sdk.alist_directives(bank_id)))}
