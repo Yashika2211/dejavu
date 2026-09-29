@@ -1,0 +1,22 @@
+# Run the whole thing locally: `docker compose up --build`, then open http://localhost:3000.
+# Keys come from .env at the repo root.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file: .env
+    ports:
+      - "8000:8000"
+  web:
+    image: node:22-slim
+    working_dir: /web
+    volumes:
+      - ./web:/web
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm build && pnpm start"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
