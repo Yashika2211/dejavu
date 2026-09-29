@@ -13,7 +13,7 @@ from pathlib import Path
 
 import structlog
 
-from dejavu.agent.loop import Investigator, Proposal, RunResult
+from dejavu.agent.loop import Investigator, LoopConfig, Proposal, RunResult
 from dejavu.agent.trace import RUNS_DIR, Trace, TraceEvent
 from dejavu.eval.grading import IncidentScore, grade
 from dejavu.llm.toolcalling import ToolCaller
@@ -134,6 +134,7 @@ class RunManager:
         race_id: str | None = None,
         lane: str | None = None,
         auto_approve: bool = False,
+        config: LoopConfig | None = None,
     ) -> LiveRun:
         run_id = f"{scenario.incident_id.lower()}-{label}-{uuid.uuid4().hex[:6]}"
         trace = Trace(run_id, directory=self.trace_dir)
@@ -149,12 +150,14 @@ class RunManager:
         self.store.save(record)
         run = LiveRun(record, trace, auto_approve=auto_approve, approval_timeout_s=self.approval_timeout_s)
         self.live[run_id] = run
-        task = asyncio.create_task(self._execute(run, scenario, strategy))
+        task = asyncio.create_task(self._execute(run, scenario, strategy, config))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return run
 
-    async def _execute(self, run: LiveRun, scenario: Scenario, strategy: MemoryStrategy) -> None:
+    async def _execute(
+        self, run: LiveRun, scenario: Scenario, strategy: MemoryStrategy, config: LoopConfig | None = None
+    ) -> None:
         status: str = "error"
         try:
             caller = await self._caller()
@@ -163,7 +166,7 @@ class RunManager:
                 await asyncio.to_thread(ensure_telemetry, scenario, self.telemetry_root)
             run.world = IncidentWorld.open(scenario, self.telemetry_root)
             investigator = Investigator(
-                caller, strategy, trace=run.trace, approver=run.approve, run_id=run.id
+                caller, strategy, config=config, trace=run.trace, approver=run.approve, run_id=run.id
             )
             run.result = await investigator.run(run.world)
             run.score = grade(run.result, scenario, run.world, known_categories())
